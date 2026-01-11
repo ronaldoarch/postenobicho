@@ -192,7 +192,7 @@ export default function HeroBanner() {
               </div>
 
               {/* Texto de regras */}
-              <div className="absolute bottom-4 right-4 lg:right-12 text-xs text-gray-700 z-20">
+              <div className="absolute bottom-4 right-4 lg:right-12 text-xs text-white drop-shadow-lg z-10">
                 *Confira as regras.
               </div>
             </div>
