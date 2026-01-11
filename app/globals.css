@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  font-family: 'Sora', sans-serif;
+}
+
+:root {
+  --swiper-theme-color: #007aff;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 20s linear infinite;
+}
+
+.spin-center {
+  animation: spin 20s linear infinite;
+}
+
+.border-top-gradient-r-blue-to-yellow {
+  border-top: 2px solid;
+  border-image: linear-gradient(90deg, #052370, #ffa100) 1;
+}
+
+/* Bottom Navigation Styles */
+.bottom-nav-container {
+  height: auto;
+  min-height: 56px;
+  padding: 4px 0;
+}
+
+.submenu-container {
+  pointer-events: none;
+}
+
+.submenu-container.active {
+  pointer-events: auto;
+}
+
+.submenu-item {
+  bottom: 0;
+  height: 70px;
+  left: 0;
+  margin: auto;
+  opacity: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translate(0) scale(0.5);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-out;
+  width: 65px;
+}
+
+.submenu-container.active .submenu-item {
+  opacity: 1;
+  transform: translate(0) scale(1);
+}
+
+.submenu-container.has-2-items.active .submenu-item:first-child {
+  transform: rotate(-60deg) translateY(-55px) rotate(55deg);
+  transition-delay: 0.05s;
+}
+
+.submenu-container.has-2-items.active .submenu-item:nth-child(2) {
+  transform: rotate(60deg) translateY(-55px) rotate(-55deg);
+  transition-delay: 0.1s;
+}
+
+.submenu-item:hover {
+  transform: scale(1.1) !important;
+}
+
+.submenu-container.has-2-items.active .submenu-item:first-child:hover {
+  transform: rotate(-60deg) translateY(-55px) rotate(55deg) scale(1.1) !important;
+}
+
+.submenu-container.has-2-items.active .submenu-item:nth-child(2):hover {
+  transform: rotate(60deg) translateY(-55px) rotate(-55deg) scale(1.1) !important;
+}
+
+@media (max-width: 767px) {
+  .bottom-nav-container {
+    padding: 2px 0;
+  }
+
+  .submenu-item {
+    height: 65px;
+    width: 60px;
+  }
+
+  .submenu-container.has-2-items.active .submenu-item:first-child {
+    transform: rotate(-60deg) translateY(-45px) rotate(55deg);
+  }
+
+  .submenu-container.has-2-items.active .submenu-item:nth-child(2) {
+    transform: rotate(60deg) translateY(-45px) rotate(-55deg);
+  }
+}
