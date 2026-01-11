@@ -96,39 +96,70 @@ export default function PromocoesPage() {
                 </td>
               </tr>
             ) : (
-              promocoes.map((promocao) => (
-                <tr key={promocao.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{promocao.id}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{promocao.title}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">{promocao.description}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{promocao.bonus}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => toggleActive(promocao.id, promocao.active)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        promocao.active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {promocao.active ? 'Ativa' : 'Inativa'}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link
-                      href={`/admin/promocoes/${promocao.id}`}
-                      className="text-blue hover:text-blue-700 mr-4"
-                    >
-                      Editar
-                    </Link>
-                    <button
-                      onClick={() => deletePromocao(promocao.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Deletar
-                    </button>
-                  </td>
-                </tr>
+              promocoes.map((promocao) => {
+                const getTipoLabel = (tipo: string) => {
+                  const tipos: Record<string, string> = {
+                    dobro_primeiro_deposito: 'Dobro 1º Depósito',
+                    percentual: 'Percentual',
+                    valor_fixo: 'Valor Fixo',
+                    cashback: 'Cashback',
+                  }
+                  return tipos[tipo] || tipo
+                }
+
+                const getValorDisplay = () => {
+                  if (promocao.tipo === 'dobro_primeiro_deposito') {
+                    return '2x (Dobro)'
+                  }
+                  if (promocao.tipo === 'percentual') {
+                    return `${promocao.percentual || 0}%`
+                  }
+                  if (promocao.tipo === 'valor_fixo') {
+                    return `R$ ${promocao.bonus || '0.00'}`
+                  }
+                  if (promocao.tipo === 'cashback') {
+                    return `${promocao.percentual || 0}%`
+                  }
+                  return promocao.bonus || '-'
+                }
+
+                return (
+                  <tr key={promocao.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{promocao.id}</td>
+                    <td className="px-6 py-4 text-sm text-gray-900">{promocao.title}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {getTipoLabel(promocao.tipo || 'outro')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
+                      {getValorDisplay()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => toggleActive(promocao.id, promocao.active)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          promocao.active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {promocao.active ? 'Ativa' : 'Inativa'}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <Link
+                        href={`/admin/promocoes/${promocao.id}`}
+                        className="text-blue hover:text-blue-700 mr-4"
+                      >
+                        Editar
+                      </Link>
+                      <button
+                        onClick={() => deletePromocao(promocao.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Deletar
+                      </button>
+                    </td>
+                  </tr>
                 )
               })
             )}
