@@ -36,7 +36,8 @@ export default function HeroBanner() {
         },
       })
       const data = await response.json()
-      if (data.banners && data.banners.length > 0) {
+      if (data.banners) {
+        // Sempre atualiza, mesmo que seja array vazio
         setBanners(data.banners)
       }
     } catch (error) {
@@ -46,22 +47,7 @@ export default function HeroBanner() {
     }
   }
 
-  // Banners padrão caso não carregue
-  const defaultBanners = [
-    {
-      id: 1,
-      badge: 'NOVO POR AQUI?',
-      title: 'Seu Primeiro Depósito Vale O',
-      highlight: 'DOBRO!',
-      button: 'Deposite agora e aproveite!',
-      bonus: 'R$ 50',
-      bonusBgClass: 'bg-green-600',
-    },
-  ]
-
-  const bannersToShow = banners.length > 0 ? banners : defaultBanners
-
-  if (loading && banners.length === 0) {
+  if (loading) {
     return (
       <div className="relative w-full overflow-hidden bg-gradient-to-br from-yellow via-yellow-400 to-yellow-300 min-h-[300px] flex items-center justify-center">
         <div className="text-gray-600">Carregando banners...</div>
@@ -69,7 +55,7 @@ export default function HeroBanner() {
     )
   }
 
-  if (bannersToShow.length === 0) {
+  if (banners.length === 0) {
     return null
   }
 
@@ -86,10 +72,10 @@ export default function HeroBanner() {
           bulletClass: 'swiper-pagination-bullet !bg-white/50',
           bulletActiveClass: 'swiper-pagination-bullet-active !bg-white',
         }}
-        loop={bannersToShow.length > 1}
+        loop={banners.length > 1}
         className="hero-banner-swiper"
       >
-        {bannersToShow.map((banner) => (
+        {banners.map((banner) => (
           <SwiperSlide key={banner.id}>
             <div
               className="relative w-full overflow-hidden min-h-[400px] lg:min-h-[500px]"
