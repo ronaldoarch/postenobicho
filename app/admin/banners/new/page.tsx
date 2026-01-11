@@ -2,10 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 
 export default function NewBannerPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
   const [formData, setFormData] = useState({
     badge: 'NOVO POR AQUI?',
     title: 'Seu Primeiro Depósito Vale O',
@@ -13,9 +16,51 @@ export default function NewBannerPage() {
     button: 'Deposite agora e aproveite!',
     bonus: 'R$ 50',
     bonusBgClass: 'bg-green-600',
+    bannerImage: '',
+    logoImage: '',
     active: true,
     order: 1,
   })
+
+  const handleFileUpload = async (file: File, type: 'banner' | 'logo') => {
+    if (type === 'banner') {
+      setUploadingBanner(true)
+    } else {
+      setUploadingLogo(true)
+    }
+
+    try {
+      const uploadFormData = new FormData()
+      uploadFormData.append('file', file)
+      uploadFormData.append('type', type)
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: uploadFormData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        if (type === 'banner') {
+          setFormData({ ...formData, bannerImage: data.url })
+        } else {
+          setFormData({ ...formData, logoImage: data.url })
+        }
+      } else {
+        alert(data.error || 'Erro ao fazer upload')
+      }
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error)
+      alert('Erro ao fazer upload do arquivo')
+    } finally {
+      if (type === 'banner') {
+        setUploadingBanner(false)
+      } else {
+        setUploadingLogo(false)
+      }
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,6 +91,100 @@ export default function NewBannerPage() {
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Novo Banner</h1>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-md p-6 space-y-6">
+        {/* Upload de Logo */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Logo</label>
+          <div className="space-y-4">
+            {formData.logoImage && (
+              <div className="relative w-32 h-32 border-2 border-gray-300 rounded-lg overflow-hidden">
+                <Image
+                  src={formData.logoImage}
+                  alt="Logo preview"
+                  fill
+                  className="object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, logoImage: '' })}
+                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <div>
+              <input
+                type="file"
+                id="logo-upload"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleFileUpload(file, 'logo')
+                  }
+                }}
+                className="hidden"
+                disabled={uploadingLogo}
+              />
+              <label
+                htmlFor="logo-upload"
+                className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer ${
+                  uploadingLogo ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                }`}
+              >
+                {uploadingLogo ? 'Enviando...' : formData.logoImage ? 'Trocar Logo' : 'Upload Logo'}
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Upload de Banner */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Imagem do Banner</label>
+          <div className="space-y-4">
+            {formData.bannerImage && (
+              <div className="relative w-full h-48 border-2 border-gray-300 rounded-lg overflow-hidden">
+                <Image
+                  src={formData.bannerImage}
+                  alt="Banner preview"
+                  fill
+                  className="object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, bannerImage: '' })}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <div>
+              <input
+                type="file"
+                id="banner-upload"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    handleFileUpload(file, 'banner')
+                  }
+                }}
+                className="hidden"
+                disabled={uploadingBanner}
+              />
+              <label
+                htmlFor="banner-upload"
+                className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer ${
+                  uploadingBanner ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                }`}
+              >
+                {uploadingBanner ? 'Enviando...' : formData.bannerImage ? 'Trocar Banner' : 'Upload Banner'}
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Badge</label>
           <input

@@ -11,6 +11,8 @@ interface Banner {
   button: string
   bonus: string
   bonusBgClass: string
+  bannerImage?: string
+  logoImage?: string
   active: boolean
   order: number
 }
@@ -80,9 +82,9 @@ export default function BannersPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Preview</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Badge</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Título</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Destaque</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ordem</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
@@ -99,9 +101,33 @@ export default function BannersPage() {
               banners.map((banner) => (
                 <tr key={banner.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{banner.id}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      {banner.logoImage && (
+                        <div className="relative w-12 h-12 rounded overflow-hidden border border-gray-200">
+                          <img
+                            src={banner.logoImage}
+                            alt="Logo"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                      )}
+                      {banner.bannerImage && (
+                        <div className="relative w-24 h-12 rounded overflow-hidden border border-gray-200">
+                          <img
+                            src={banner.bannerImage}
+                            alt="Banner"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      )}
+                      {!banner.logoImage && !banner.bannerImage && (
+                        <span className="text-xs text-gray-400">Sem imagem</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{banner.badge}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{banner.title}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{banner.highlight}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{banner.order}</td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
