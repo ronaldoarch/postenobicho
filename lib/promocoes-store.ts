@@ -27,7 +27,9 @@ export function addPromocao(promocao: any): any {
   const newPromocao = {
     id: promocoes.length > 0 ? Math.max(...promocoes.map((p) => p.id)) + 1 : 1,
     ...promocao,
+    tipo: promocao.tipo || 'outro',
     active: promocao.active !== undefined ? promocao.active : true,
+    order: promocao.order || promocoes.length + 1,
     createdAt: new Date().toISOString(),
   }
   promocoes.push(newPromocao)

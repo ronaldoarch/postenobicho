@@ -7,7 +7,11 @@ interface Promocao {
   id: number
   title: string
   description: string
-  bonus: string
+  tipo: string
+  bonus?: string
+  percentual?: number
+  valorMinimo?: number
+  valorMaximo?: number
   active: boolean
   createdAt: string
 }
@@ -78,8 +82,8 @@ export default function PromocoesPage() {
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Título</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Descrição</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bônus</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
             </tr>
@@ -125,7 +129,8 @@ export default function PromocoesPage() {
                     </button>
                   </td>
                 </tr>
-              ))
+                )
+              })
             )}
           </tbody>
         </table>
