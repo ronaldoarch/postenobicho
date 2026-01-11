@@ -2,6 +2,7 @@ import Header from '@/components/Header'
 import HeroBanner from '@/components/HeroBanner'
 import StoriesSection from '@/components/StoriesSection'
 import LiveQuotation from '@/components/LiveQuotation'
+import ResultsSection from '@/components/ResultsSection'
 import VipBanner from '@/components/VipBanner'
 import FAQSection from '@/components/FAQSection'
 import Footer from '@/components/Footer'
@@ -24,6 +25,9 @@ export default function Home() {
 
           {/* Cotação ao Vivo */}
           <LiveQuotation />
+
+          {/* Seção Resultados */}
+          <ResultsSection />
 
           {/* Banner VIP */}
           <VipBanner />
