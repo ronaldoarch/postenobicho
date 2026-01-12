@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import TemaProvider from '@/components/TemaProvider'
 
 export const metadata: Metadata = {
   title: 'Lot Bicho - Acerte no Jogo do Bicho e Ganhe!',
@@ -20,7 +21,7 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://code.iconify.design/3/3.1.1/iconify.min.css" />
       </head>
       <body className="antialiased">
-        {children}
+        <TemaProvider>{children}</TemaProvider>
       </body>
     </html>
   )

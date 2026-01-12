@@ -8,25 +8,35 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'blue': '#052370',
+        'blue': 'var(--tema-primaria)',
         'blue-scale': {
-          '70': '#0a3d8a',
-          '100': '#052370',
+          '70': 'var(--tema-primaria)',
+          '100': 'var(--tema-primaria)',
           '2-10': 'rgba(5, 35, 112, 0.1)',
         },
-        'yellow': '#FFA100',
-        'yellow-50': '#ffeb99',
+        'yellow': 'var(--tema-secundaria)',
+        'yellow-50': 'color-mix(in srgb, var(--tema-secundaria) 50%, white)',
         'white-125': 'rgba(255, 255, 255, 0.125)',
         'gray-scale': {
-          '100': '#f5f5f5',
-          '700': '#4a4a4a',
-          '950': '#1c1c1c',
+          '100': 'var(--tema-fundo)',
+          '700': 'var(--tema-texto-secundario)',
+          '950': 'var(--tema-texto)',
         },
         'grey-scale': {
-          '900': '#1c1c1c',
+          '900': 'var(--tema-texto)',
         },
         'white-scale': {
-          '0': '#ffffff',
+          '0': 'var(--tema-fundo-secundario)',
+        },
+        'tema': {
+          'primaria': 'var(--tema-primaria)',
+          'secundaria': 'var(--tema-secundaria)',
+          'acento': 'var(--tema-acento)',
+          'sucesso': 'var(--tema-sucesso)',
+          'texto': 'var(--tema-texto)',
+          'texto-secundario': 'var(--tema-texto-secundario)',
+          'fundo': 'var(--tema-fundo)',
+          'fundo-secundario': 'var(--tema-fundo-secundario)',
         },
       },
       fontFamily: {
