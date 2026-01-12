@@ -2,7 +2,16 @@
 const nextConfig = {
   output: 'standalone',
   images: {
-    domains: ['ponto-do-bicho.b-cdn.net', 'pontodobicho.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'ponto-do-bicho.b-cdn.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'pontodobicho.com',
+      },
+    ],
   },
   eslint: {
     ignoreDuringBuilds: true,
