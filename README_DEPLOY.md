@@ -50,9 +50,15 @@ DATABASE_URL="postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3
 
 3. **Após o primeiro deploy, rode no terminal do Colify** (apenas uma vez):
    ```bash
+   npm run init:db
+   ```
+   Ou diretamente:
+   ```bash
    npm run prisma:push
    ```
    Isso cria todas as tabelas no banco de dados.
+   
+   **IMPORTANTE:** Execute este comando no terminal do Colify após o primeiro deploy bem-sucedido. Você pode acessar o terminal através da aba "Terminal" no painel do Colify.
 
 #### Opção 2: Testar Localmente Primeiro (Opcional)
 
