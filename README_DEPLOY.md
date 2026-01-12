@@ -36,32 +36,49 @@ DATABASE_URL="postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3
 
 ### Deploy no Colify
 
-1. **Configure a variável de ambiente `DATABASE_URL`** no painel do Colify com a URL do PostgreSQL fornecida.
+#### Opção 1: Deploy Automático (Recomendado)
+
+1. **Configure a variável de ambiente `DATABASE_URL`** no painel do Colify com a URL do PostgreSQL:
+   ```
+   postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3WzS80RetfPNz7z2Zle@uk40so004k8gc488ws0sokg0:5432/postgres
+   ```
+
+2. **Faça o deploy normalmente** - o Colify vai:
+   - Instalar dependências (`npm install`)
+   - Gerar o Prisma Client automaticamente (já está no script `build`)
+   - Fazer o build do projeto
+
+3. **Após o primeiro deploy, rode no terminal do Colify** (apenas uma vez):
+   ```bash
+   npm run prisma:push
+   ```
+   Isso cria todas as tabelas no banco de dados.
+
+#### Opção 2: Testar Localmente Primeiro (Opcional)
+
+Se quiser testar localmente antes:
+
+1. **Crie o arquivo `.env`** na raiz com:
+   ```env
+   DATABASE_URL="postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3WzS80RetfPNz7z2Zle@uk40so004k8gc488ws0sokg0:5432/postgres"
+   ```
 
 2. **Instale as dependências:**
    ```bash
    npm install
    ```
 
-3. **Gere o cliente Prisma:**
-   ```bash
-   npm run prisma:generate
-   ```
-
-4. **Crie as tabelas no banco:**
+3. **Crie as tabelas no banco:**
    ```bash
    npm run prisma:push
    ```
 
-5. **Build do projeto:**
+4. **Teste localmente:**
    ```bash
-   npm run build
+   npm run dev
    ```
 
-6. **Inicie o servidor:**
-   ```bash
-   npm start
-   ```
+5. **Depois faça o deploy no Colify** - só precisa rodar `prisma:push` uma vez no terminal do Colify após o primeiro deploy.
 
 ### Estrutura do Banco de Dados
 
