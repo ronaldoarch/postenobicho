@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
 
 export default function NewBannerPage() {
   const router = useRouter()
@@ -97,11 +96,10 @@ export default function NewBannerPage() {
           <div className="space-y-4">
             {formData.logoImage && (
               <div className="relative w-32 h-32 border-2 border-gray-300 rounded-lg overflow-hidden">
-                <Image
+                <img
                   src={formData.logoImage}
                   alt="Logo preview"
-                  fill
-                  className="object-contain"
+                  className="w-full h-full object-contain"
                 />
                 <button
                   type="button"
@@ -144,11 +142,10 @@ export default function NewBannerPage() {
           <div className="space-y-4">
             {formData.bannerImage && (
               <div className="relative w-full h-48 border-2 border-gray-300 rounded-lg overflow-hidden">
-                <Image
+                <img
                   src={formData.bannerImage}
                   alt="Banner preview"
-                  fill
-                  className="object-cover"
+                  className="w-full h-full object-cover"
                 />
                 <button
                   type="button"
