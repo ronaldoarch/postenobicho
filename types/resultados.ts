@@ -8,6 +8,13 @@ export interface ResultadoItem {
   location?: string
   date?: string
   estado?: string
+  posicao?: number
+  colocacao?: string
+  horario?: string
+  dataExtracao?: string
+  timestamp?: string
+  fonte?: string
+  urlOrigem?: string
 }
 
 export interface ResultadosResponse {

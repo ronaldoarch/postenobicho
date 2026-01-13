@@ -106,6 +106,7 @@ model Usuario {
   nome      String
   email     String   @unique
   telefone  String?
+  passwordHash String?
   saldo     Float    @default(0)
   bonus     Float    @default(0)
   bonusBloqueado Float @default(0)

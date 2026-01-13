@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ResultadosResponse, ResultadoItem } from '@/types/resultados'
+import { ResultadoItem } from '@/types/resultados'
 import { toIsoDate } from '@/lib/resultados-helpers'
 
 const RAW_SOURCE =
@@ -115,17 +115,6 @@ function normalizeText(value: string) {
   return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
-function resolveUF(location?: string | null) {
-  if (!location) return undefined
-  const key = normalizeText(location)
-  return UF_ALIASES[key] ?? (key.length === 2 ? key.toUpperCase() : undefined)
-}
-
-function buildUrl(uf?: string) {
-  if (uf) return `${SOURCE_ROOT}/api/resultados/estado/${uf}`
-  return `${SOURCE_ROOT}/api/resultados`
-}
-
 function inferUfFromName(name?: string | null) {
   if (!name) return undefined
   const key = normalizeText(name)
@@ -137,37 +126,6 @@ function inferUfFromName(name?: string | null) {
   )
 }
 
-function normalizeResults(raw: any[]): ResultadoItem[] {
-  return raw.map((r: any, idx: number) => ({
-    position: r.position || r.premio || r.colocacao || `${idx + 1}°`,
-    milhar: r.milhar || r.numero || r.milharNumero || r.valor || '',
-    grupo: r.grupo || r.grupoNumero || '',
-    animal: r.animal || r.nomeAnimal || '',
-    drawTime: r.horario || r.drawTime || r.concurso || '',
-    horario: r.horario || undefined,
-    loteria: r.loteria || r.nomeLoteria || r.concurso || r.horario || '',
-    location: r.local || r.estado || r.cidade || r.uf || '',
-    date: r.data || r.date || r.dia || r.data_extração || r.dataExtracao || '',
-    dataExtracao: r.data_extração || r.dataExtracao || r.data || r.date || '',
-    estado: r.estado || inferUfFromName(r.estado) || inferUfFromName(r.loteria) || inferUfFromName(r.local) || undefined,
-    posicao: r.posicao || (r.colocacao && parseInt(String(r.colocacao).replace(/\D/g, ''), 10)) || undefined,
-    colocacao: r.colocacao || r.position || r.premio || `${idx + 1}°`,
-    timestamp: r.timestamp || r.createdAt || r.updatedAt || undefined,
-    fonte: r.fonte || r.origem || undefined,
-    urlOrigem: r.url_origem || r.urlOrigem || r.link || undefined,
-  }))
-}
-
-function orderByPosition(items: ResultadoItem[]) {
-  const getOrder = (value?: string, pos?: number) => {
-    if (typeof pos === 'number' && !Number.isNaN(pos)) return pos
-    if (!value) return Number.MAX_SAFE_INTEGER
-    const match = value.match(/(\d+)/)
-    return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER
-  }
-  return [...items].sort((a, b) => getOrder(a.position, a.posicao) - getOrder(b.position, b.posicao))
-}
-
 function matchesDateFilter(value: string | undefined, filter: string) {
   if (!filter) return true
   if (!value) return false
@@ -175,7 +133,6 @@ function matchesDateFilter(value: string | undefined, filter: string) {
   const isoValue = toIsoDate(value)
   const isoFilter = toIsoDate(filter)
 
-  // Se a fonte não traz ano (ex.: 13/01), comparar só dia/mês
   const dayMonth = (v: string) => {
     const m = v.match(/(\d{2})\/(\d{2})/)
     return m ? `${m[1]}/${m[2]}` : undefined
@@ -192,43 +149,86 @@ function matchesDateFilter(value: string | undefined, filter: string) {
   )
 }
 
+function orderByPosition(items: ResultadoItem[]) {
+  const getOrder = (value?: string, pos?: number) => {
+    if (typeof pos === 'number' && !Number.isNaN(pos)) return pos
+    if (!value) return Number.MAX_SAFE_INTEGER
+    const match = value.match(/(\d+)/)
+    return match ? parseInt(match[1], 10) : Number.MAX_SAFE_INTEGER
+  }
+  return [...items].sort((a, b) => getOrder(a.position, a.posicao) - getOrder(b.position, b.posicao))
+}
+
+function normalizeResults(raw: any[]): ResultadoItem[] {
+  return raw.map((r: any, idx: number) => ({
+    position: r.position || r.premio || r.colocacao || `${idx + 1}°`,
+    milhar: r.milhar || r.numero || r.milharNumero || r.valor || '',
+    grupo: r.grupo || r.grupoNumero || '',
+    animal: r.animal || r.nomeAnimal || '',
+    drawTime: r.horario || r.drawTime || r.concurso || '',
+    loteria: r.loteria || r.nomeLoteria || r.concurso || r.horario || '',
+    location: r.local || r.estado || r.cidade || r.uf || '',
+    date: r.data || r.date || r.dia || r.data_extração || r.dataExtracao || '',
+    dataExtracao: r.data_extração || r.dataExtracao || r.data || r.date || '',
+    estado: r.estado || inferUfFromName(r.estado) || inferUfFromName(r.loteria) || inferUfFromName(r.local) || undefined,
+    posicao: r.posicao || (r.colocacao && parseInt(String(r.colocacao).replace(/\D/g, ''), 10)) || undefined,
+    colocacao: r.colocacao || r.position || r.premio || `${idx + 1}°`,
+    horario: r.horario || undefined,
+    timestamp: r.timestamp || r.createdAt || r.updatedAt || undefined,
+    fonte: r.fonte || r.origem || undefined,
+    urlOrigem: r.url_origem || r.urlOrigem || r.link || undefined,
+  }))
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const dateFilter = searchParams.get('date') // mantido apenas para futura compatibilidade, não filtramos
-  const locationFilter = searchParams.get('location') // mantido apenas para futura compatibilidade, não filtramos
-  const uf = resolveUF(locationFilter)
+  const dateFilter = searchParams.get('date')
 
   try {
-    // Sempre buscamos a rota geral para não perder resultados por filtros do upstream
-    let res = await fetch(buildUrl(undefined), { cache: 'no-store' })
+    const res = await fetch(`${SOURCE_ROOT}/api/resultados`, { cache: 'no-store' })
     if (!res.ok) throw new Error(`Upstream status ${res.status}`)
 
     const data = await res.json()
     const rawResults = data?.resultados ?? data?.results ?? []
     let results = normalizeResults(rawResults)
 
-    // Filtro apenas por data (frontend não precisa se quiser tudo)
     if (dateFilter) {
       results = results.filter((r) => matchesDateFilter(r.date, dateFilter))
     }
 
-    // Limitar até 10 posições após ordenar pelo prêmio/posição
-    results = orderByPosition(results).slice(0, 10)
+    const por_estado: Record<string, ResultadoItem[]> = {}
 
-    const payload: ResultadosResponse = {
-      results,
-      updatedAt: data?.updatedAt || new Date().toISOString(),
-    }
+    results.forEach((r) => {
+      const uf = r.estado || inferUfFromName(r.loteria) || inferUfFromName(r.location) || 'BR'
+      const arr = por_estado[uf] ?? []
+      arr.push(r)
+      por_estado[uf] = arr
+    })
 
-    return NextResponse.json(payload, { status: 200, headers: { 'Cache-Control': 'no-cache' } })
+    const estatisticas: Record<string, number> = {}
+    Object.entries(por_estado).forEach(([uf, arr]) => {
+      por_estado[uf] = orderByPosition(arr).slice(0, 10)
+      estatisticas[uf] = por_estado[uf].length
+    })
+
+    return NextResponse.json({
+      por_estado,
+      estatisticas,
+      total_resultados: results.length,
+      total_estados: Object.keys(por_estado).length,
+      ultima_verificacao: data?.ultima_verificacao || data?.updatedAt || new Date().toISOString(),
+    })
   } catch (error) {
-    console.error('Erro ao buscar resultados externos:', error)
+    console.error('Erro ao agrupar resultados por estado:', error)
     return NextResponse.json(
       {
-        results: [],
-        updatedAt: new Date().toISOString(),
+        por_estado: {},
+        estatisticas: {},
+        total_resultados: 0,
+        total_estados: 0,
+        ultima_verificacao: new Date().toISOString(),
         error: 'Falha ao buscar resultados externos',
-      } satisfies ResultadosResponse & { error: string },
+      },
       { status: 502 }
     )
   }
