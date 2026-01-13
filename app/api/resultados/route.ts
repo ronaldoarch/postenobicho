@@ -2,26 +2,74 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ResultadosResponse, ResultadoItem } from '@/types/resultados'
 import { toIsoDate } from '@/lib/resultados-helpers'
 
-const LOCATION_MAP: Record<string, string[]> = {
-  'rio de janeiro': ['pt rio', 'pt-rio', 'pt-rio 9h20', 'pt-rio 11h20', 'rio de janeiro', 'rj'],
-  'sao paulo': ['pt sp', 'pt-sp', 'pt sao paulo', 'pt são paulo', 'sao paulo', 'sp'],
-  bahia: ['pt bahia', 'pt-ba', 'ptba', 'bahia', 'ba'],
-  goias: ['look', 'look goias', 'look goiás', 'goias', 'goiás', 'go'],
-  'distrito federal': ['df', 'distrito federal', 'brasilia', 'brasília'],
-  brasilia: ['df', 'distrito federal', 'brasilia', 'brasília'],
-  nacional: ['nacional'],
-  federal: ['federal', 'loteria federal'],
-  'para todos': ['para todos', 'para-todos'],
+const RAW_SOURCE =
+  process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'
+const SOURCE_ROOT = RAW_SOURCE.replace(/\/api\/resultados$/, '')
+
+const UF_ALIASES: Record<string, string> = {
+  rj: 'RJ',
+  'rio de janeiro': 'RJ',
+  'pt rio': 'RJ',
+  'pt-rio': 'RJ',
+  'pt rio de janeiro': 'RJ',
+  sp: 'SP',
+  'sao paulo': 'SP',
+  'são paulo': 'SP',
+  'pt sp': 'SP',
+  'pt-sp': 'SP',
+  bandeirantes: 'SP',
+  ba: 'BA',
+  bahia: 'BA',
+  'pt bahia': 'BA',
+  'pt-ba': 'BA',
+  go: 'GO',
+  goias: 'GO',
+  'goiás': 'GO',
+  look: 'GO',
+  'look goias': 'GO',
+  'look goiás': 'GO',
+  pb: 'PB',
+  paraiba: 'PB',
+  'paraíba': 'PB',
+  lotep: 'PB',
+  'pt paraiba': 'PB',
+  ce: 'CE',
+  ceara: 'CE',
+  'ceará': 'CE',
+  lotece: 'CE',
+  mg: 'MG',
+  minas: 'MG',
+  pr: 'PR',
+  parana: 'PR',
+  'paraná': 'PR',
+  sc: 'SC',
+  'santa catarina': 'SC',
+  rs: 'RS',
+  'rio grande do sul': 'RS',
+  df: 'DF',
+  brasilia: 'DF',
+  'brasília': 'DF',
+  'distrito federal': 'DF',
+  federal: 'BR',
+  nacional: 'BR',
+  'loteria federal': 'BR',
+  'para todos': 'BR',
 }
 
 function normalizeText(value: string) {
-  return value
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+  return value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
-const SOURCE_URL = process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'
+function resolveUF(location?: string | null) {
+  if (!location) return undefined
+  const key = normalizeText(location)
+  return UF_ALIASES[key] ?? (key.length === 2 ? key.toUpperCase() : undefined)
+}
+
+function buildUrl(uf?: string) {
+  if (uf) return `${SOURCE_ROOT}/api/resultados/estado/${uf}`
+  return `${SOURCE_ROOT}/api/resultados`
+}
 
 function normalizeResults(raw: any[]): ResultadoItem[] {
   return raw.map((r: any, idx: number) => ({
@@ -32,6 +80,7 @@ function normalizeResults(raw: any[]): ResultadoItem[] {
     drawTime: r.horario || r.drawTime || r.concurso || '',
     location: r.local || r.estado || r.cidade || r.uf || '',
     date: r.data || r.date || r.dia || '',
+    estado: r.estado || undefined,
   }))
 }
 
@@ -54,9 +103,10 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const dateFilter = searchParams.get('date')
   const locationFilter = searchParams.get('location')
+  const uf = resolveUF(locationFilter)
 
   try {
-    const res = await fetch(SOURCE_URL, { cache: 'no-store' })
+    const res = await fetch(buildUrl(uf), { cache: 'no-store' })
     if (!res.ok) throw new Error(`Upstream status ${res.status}`)
     const data = await res.json()
     const rawResults = data?.resultados ?? data?.results ?? []
@@ -65,18 +115,19 @@ export async function GET(req: NextRequest) {
     if (dateFilter) {
       results = results.filter((r) => matchesDateFilter(r.date, dateFilter))
     }
-    if (locationFilter) {
-      const lf = normalizeText(locationFilter)
-      const aliases = LOCATION_MAP[lf] ?? [lf]
+    if (uf) {
       results = results
-        .filter((r) => {
-          const combined = normalizeText(`${r.location || ''} ${r.drawTime || ''}`)
-          return aliases.some((alias) => combined.includes(alias))
-        })
+        .filter((r) => (r.estado || r.location || '').toUpperCase().includes(uf))
         .map((r) => ({
           ...r,
-          location: r.location || locationFilter,
+          location: r.location || uf,
+          estado: r.estado || uf,
         }))
+    } else if (locationFilter) {
+      results = results.map((r) => ({
+        ...r,
+        location: r.location || r.estado || locationFilter,
+      }))
     }
 
     const payload: ResultadosResponse = {
