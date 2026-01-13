@@ -19,17 +19,28 @@ export async function getConfiguracoes() {
   return config
 }
 
+function normalizeConfiguracoes(updates: any) {
+  const data: any = {}
+  if (updates.nomePlataforma !== undefined) data.nomePlataforma = updates.nomePlataforma
+  if (updates.numeroSuporte !== undefined) data.numeroSuporte = updates.numeroSuporte
+  if (updates.emailSuporte !== undefined) data.emailSuporte = updates.emailSuporte
+  if (updates.whatsappSuporte !== undefined) data.whatsappSuporte = updates.whatsappSuporte
+  if (updates.logoSite !== undefined) data.logoSite = updates.logoSite
+  return data
+}
+
 export async function updateConfiguracoes(updates: any) {
   let config = await prisma.configuracao.findFirst()
+  const data = normalizeConfiguracoes(updates)
   
   if (!config) {
     return await prisma.configuracao.create({
-      data: updates,
+      data,
     })
   }
   
   return await prisma.configuracao.update({
     where: { id: config.id },
-    data: updates,
+    data,
   })
 }
