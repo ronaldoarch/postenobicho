@@ -6,6 +6,7 @@ export interface ResultadoItem {
   drawTime?: string
   location?: string
   date?: string
+  estado?: string
 }
 
 export interface ResultadosResponse {
