@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao salvar arquivo no servidor' }, { status: 500 })
     }
 
-    // Retornar URL do arquivo (usar caminho relativo para funcionar em qualquer ambiente)
+    // Retornar URL do arquivo (usar rota interna para garantir entrega em qualquer ambiente)
     const fileUrl = `/uploads/${uploadDir}/${fileName}`
 
     return NextResponse.json({
