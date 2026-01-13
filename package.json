@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "next build",
     "start": "node scripts/check-db.js && next start",
     "start:only": "next start",
     "lint": "next lint",
@@ -12,8 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "prisma:push": "prisma db push",
-    "init:db": "node scripts/check-db.js",
-    "postinstall": "prisma generate"
+    "init:db": "node scripts/check-db.js"
   },
   "dependencies": {
     "@prisma/client": "^5.0.0",

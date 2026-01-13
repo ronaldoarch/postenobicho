@@ -8,11 +8,8 @@ RUN mkdir -p /app/public/uploads/banners /app/public/uploads/logos /app/public/u
 # Copiar arquivos de dependências
 COPY package.json package-lock.json* ./
 
-# Pular prisma generate no postinstall (schema ainda não está copiado)
-ENV PRISMA_SKIP_POSTINSTALL=1
-
-# Instalar dependências
-RUN npm ci
+# Instalar dependências sem rodar scripts (evita prisma generate antes do schema)
+RUN npm ci --ignore-scripts
 
 # Copiar arquivos do projeto
 COPY . .
