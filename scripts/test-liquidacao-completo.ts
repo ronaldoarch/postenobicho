@@ -62,7 +62,7 @@ try {
 
   console.log('✅ Aposta conferida')
   console.log('   Grupos apostados: 8 e 9')
-  console.log('   Grupos no resultado:', [...new Set(resultado.groups)].join(', '))
+  console.log('   Grupos no resultado:', Array.from(new Set(resultado.groups)).join(', '))
   console.log('   Acertos:', conferencia.prize.hits)
   console.log('   Prêmio: R$', conferencia.totalPrize.toFixed(2))
   console.log('   Status:', conferencia.prize.hits > 0 ? '✅ GANHOU' : '❌ PERDEU')
@@ -118,7 +118,7 @@ try {
 
   console.log('✅ Aposta conferida')
   console.log('   Grupos apostados: 8, 9, 20, 23')
-  console.log('   Grupos únicos no resultado:', [...new Set(resultado.groups)].join(', '))
+  console.log('   Grupos únicos no resultado:', Array.from(new Set(resultado.groups)).join(', '))
   console.log('   Acertos:', conferencia.prize.hits)
   console.log('   Prêmio: R$', conferencia.totalPrize.toFixed(2))
   console.log('   Status:', conferencia.prize.hits > 0 ? '✅ GANHOU' : '❌ PERDEU')
