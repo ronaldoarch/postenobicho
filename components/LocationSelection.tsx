@@ -66,6 +66,8 @@ export default function LocationSelection({
   const normalized = useMemo(() => {
     return extracoes
       .map((e) => {
+        // realCloseTime = quando fecha no site (para de aceitar apostas)
+        // closeTime = quando acontece a apuração no bicho certo
         const closeStr = e.realCloseTime || e.closeTime || e.time
         const closeDate = parseTimeToday(closeStr)
         const minutesToClose = closeDate ? (closeDate.getTime() - now) / 60000 : Number.POSITIVE_INFINITY
@@ -208,7 +210,7 @@ export default function LocationSelection({
       </div>
 
       {/* Horários especiais */}
-      {!instant && (
+      {!instant && SPECIAL_TIMES.length > 0 && (
         <div className="mb-6">
           <h3 className="mb-4 text-lg font-semibold text-gray-950">Horários Especiais:</h3>
           <div className="space-y-3">

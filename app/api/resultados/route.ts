@@ -237,8 +237,16 @@ export async function GET(req: NextRequest) {
     const organizados = data?.organizados || {}
 
     let results: ResultadoItem[] = []
+    const extracaoHorarios: Record<string, string[]> = {}
+    
     Object.entries(organizados).forEach(([tabela, horarios]) => {
+      if (!extracaoHorarios[tabela]) {
+        extracaoHorarios[tabela] = []
+      }
       Object.entries(horarios as Record<string, any[]>).forEach(([horario, lista]) => {
+        if (!extracaoHorarios[tabela].includes(horario)) {
+          extracaoHorarios[tabela].push(horario)
+        }
         const arr = (lista || []).map((item: any, idx: number) => {
           const estado =
             item.estado || inferUfFromName(item.estado) || inferUfFromName(tabela) || inferUfFromName(item.local)
@@ -279,6 +287,12 @@ export async function GET(req: NextRequest) {
       results = results.filter((r) => normalizeText(r.location || '').includes(lf))
     }
 
+    // Logs de debug: mostrar quantos horários cada extração tem
+    Object.entries(extracaoHorarios).forEach(([extracao, horarios]) => {
+      console.log(`📊 Extração "${extracao}": ${horarios.length} horário(s) - ${horarios.join(', ')}`)
+    })
+    console.log(`📈 Total processado: ${Object.keys(extracaoHorarios).length} extrações, ${Object.values(extracaoHorarios).reduce((sum, h) => sum + h.length, 0)} horários, ${results.length} resultados`)
+
     // Ordenar e limitar em 7 posições por sorteio
     const grouped: Record<string, ResultadoItem[]> = {}
     results.forEach((r) => {
@@ -289,6 +303,8 @@ export async function GET(req: NextRequest) {
     results = Object.values(grouped)
       .map((arr) => orderByPosition(arr).slice(0, 7))
       .flat()
+
+    console.log(`✅ Resultados finais: ${Object.keys(grouped).length} grupos únicos (loteria|horário|data), ${results.length} resultados totais`)
 
     const payload: ResultadosResponse = {
       results,

@@ -18,6 +18,7 @@ const INITIAL_BET_DATA: BetData = {
   animalBets: [],
   position: null,
   customPosition: false,
+  customPositionValue: undefined,
   amount: 2.0,
   divisionType: 'all',
   useBonus: false,
@@ -66,6 +67,41 @@ export default function BetFlow() {
 
   const handleNext = () => {
     if (currentStep === 2 && !animalsValid) return
+    
+    // Validação de posição no step 3
+    if (currentStep === 3) {
+      if (!betData.customPosition && !betData.position) {
+        alert('Por favor, selecione uma posição ou marque "Personalizado" e digite uma posição válida.')
+        return
+      }
+      
+      if (betData.customPosition && (!betData.customPositionValue || betData.customPositionValue.trim() === '')) {
+        alert('Por favor, digite uma posição personalizada (ex: 1-5, 7, 5, etc.).')
+        return
+      }
+      
+      // Validar formato da posição personalizada
+      if (betData.customPosition && betData.customPositionValue) {
+        const cleanedPos = betData.customPositionValue.replace(/º/g, '').replace(/\s/g, '')
+        const isValidFormat = /^\d+(-\d+)?$/.test(cleanedPos)
+        
+        if (!isValidFormat) {
+          alert('Formato inválido. Use números (ex: 1, 2, 3) ou ranges (ex: 1-5, 2-7).')
+          return
+        }
+        
+        // Validar valores (entre 1 e 7)
+        const parts = cleanedPos.split('-')
+        const firstNum = parseInt(parts[0], 10)
+        const secondNum = parts[1] ? parseInt(parts[1], 10) : firstNum
+        
+        if (firstNum < 1 || firstNum > 7 || secondNum < 1 || secondNum > 7 || firstNum > secondNum) {
+          alert('Posição inválida. Use valores entre 1 e 7. Exemplos: "1-5", "7", "3", "1-7".')
+          return
+        }
+      }
+    }
+    
     const nextStep = currentStep + 1
     if (nextStep >= 3 && !isAuthenticated) {
       alert('Você precisa estar logado para continuar. Faça login para usar seu saldo.')
@@ -228,13 +264,17 @@ export default function BetFlow() {
           <PositionAmountDivision
             position={betData.position}
             customPosition={betData.customPosition}
+            customPositionValue={betData.customPositionValue}
             amount={betData.amount}
             divisionType={betData.divisionType}
             useBonus={betData.useBonus}
             bonusAmount={betData.bonusAmount}
-            onPositionChange={(pos) => setBetData((prev) => ({ ...prev, position: pos }))}
+            onPositionChange={(pos) => setBetData((prev) => ({ ...prev, position: pos, customPosition: false }))}
             onCustomPositionChange={(checked) =>
-              setBetData((prev) => ({ ...prev, customPosition: checked }))
+              setBetData((prev) => ({ ...prev, customPosition: checked, position: checked ? null : prev.position }))
+            }
+            onCustomPositionValueChange={(value) =>
+              setBetData((prev) => ({ ...prev, customPositionValue: value }))
             }
             onAmountChange={(amount) => setBetData((prev) => ({ ...prev, amount }))}
             onDivisionTypeChange={(type) => setBetData((prev) => ({ ...prev, divisionType: type }))}
@@ -301,7 +341,9 @@ export default function BetFlow() {
             disabled={
               (currentStep === 1 && !betData.modality && activeTab === 'bicho') ||
               (currentStep === 2 && !animalsValid) ||
-              (currentStep >= 2 && isAuthenticated === false)
+              (currentStep >= 2 && isAuthenticated === false) ||
+              (currentStep === 3 && !betData.customPosition && !betData.position) ||
+              (currentStep === 3 && betData.customPosition && (!betData.customPositionValue || betData.customPositionValue.trim() === ''))
             }
             className="flex-1 rounded-lg bg-yellow px-6 py-3 font-bold text-blue-950 hover:bg-yellow/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >

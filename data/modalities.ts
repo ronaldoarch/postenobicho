@@ -32,7 +32,6 @@ export const SPECIAL_QUOTATIONS: SpecialQuotation[] = [
   { id: 1, name: 'PONTO-NOITE 18h', value: '1x R$ 7000.00', time: '18h' },
   { id: 2, name: 'PONTO-MEIO-DIA 12h', value: '1x R$ 7000.00', time: '12h' },
   { id: 3, name: 'PONTO-TARDE 15h', value: '1x R$ 7000.00', time: '15h' },
-  { id: 4, name: 'PONTO-CORUJA 22h', value: '1x R$ 7000.00', time: '22h' },
   { id: 5, name: 'PONTO-MADRUGADA', value: '1x R$ 7000.00', time: 'madrugada' },
 ]
 
@@ -49,6 +48,6 @@ export const LOCATIONS: Location[] = [
   { id: 'goias', name: 'Goiás' },
 ]
 
-export const SPECIAL_TIMES = [
-  { id: 'coruja', name: 'PONTO-CORUJA 22h', time: '22h' },
+export const SPECIAL_TIMES: Array<{ id: string; name: string; time: string }> = [
+  // PONTO-CORUJA removido conforme solicitação
 ]

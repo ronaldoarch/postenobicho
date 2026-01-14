@@ -11,6 +11,7 @@ import {
 import { ANIMALS } from '@/data/animals'
 import { ResultadoItem } from '@/types/resultados'
 import { verificarMilharCotada, verificarCentenaCotada, extrairCentena } from '@/lib/cotacao'
+import { extracoes } from '@/data/extracoes'
 
 /**
  * GET /api/resultados/liquidar
@@ -150,13 +151,13 @@ export async function POST(request: NextRequest) {
     // Fallback para API externa se necessário
     if (resultados.length === 0) {
       try {
-        const resultadosResponse = await fetch(
-          `${process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'}`,
+    const resultadosResponse = await fetch(
+      `${process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'}`,
           { 
             cache: 'no-store',
             signal: AbortSignal.timeout(30000),
           }
-        )
+    )
 
         if (resultadosResponse.ok) {
           resultadosData = await resultadosResponse.json()
@@ -164,7 +165,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('❌ Erro ao buscar resultados da API externa:', error)
-        throw new Error('Erro ao buscar resultados oficiais')
+      throw new Error('Erro ao buscar resultados oficiais')
       }
     }
 
@@ -203,16 +204,80 @@ export async function POST(request: NextRequest) {
     let liquidadas = 0
     let premioTotalGeral = 0
 
+    // Mapeamento flexível de nomes de extrações para encontrar resultados
+    const extracaoNameMap: Record<string, string[]> = {
+      'PT RIO': ['pt rio', 'PT RIO', 'pt rio de janeiro', 'pt-rio', 'pt-rio de janeiro', 'mpt-rio', 'mpt rio'],
+      'PT BAHIA': ['pt bahia', 'pt-ba', 'maluca bahia'],
+      'PT SP': ['pt sp', 'pt-sp', 'pt sp bandeirantes', 'pt-sp/bandeirantes', 'bandeirantes', 'pt sp (band)'],
+      'LOOK': ['look', 'look goiás', 'look goias'],
+      'LOTEP': ['lotep', 'pt paraiba/lotep', 'pt paraiba', 'pt paraíba', 'pt-pb'],
+      'LOTECE': ['lotece', 'pt ceara', 'pt ceará'],
+      'NACIONAL': ['nacional', 'loteria nacional'],
+      'FEDERAL': ['federal', 'loteria federal'],
+      'PARA TODOS': ['para todos'],
+    }
+
     // Processar cada aposta
     for (const aposta of apostasPendentes) {
       try {
+        // Verificar se já passou o horário de apuração
+        if (aposta.loteria && aposta.horario && aposta.dataConcurso) {
+          // Tentar encontrar extração por ID (se loteria for número) ou por nome
+          const extracaoId = parseInt(aposta.loteria, 10)
+          const extracao = !isNaN(extracaoId) 
+            ? extracoes.find((e) => e.id === extracaoId)
+            : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria.toLowerCase())
+          
+          if (extracao && extracao.closeTime) {
+            const hoje = new Date()
+            const dataAposta = new Date(aposta.dataConcurso)
+            const dataApostaStr = dataAposta.toISOString().split('T')[0]
+            const hojeStr = hoje.toISOString().split('T')[0]
+            
+            // Se for hoje, verificar se já passou o horário de apuração
+            if (dataApostaStr === hojeStr) {
+              const [horaClose, minutoClose] = extracao.closeTime.split(':').map(Number)
+              const horarioClose = new Date()
+              horarioClose.setHours(horaClose || 0, minutoClose || 0, 0, 0)
+              
+              if (hoje < horarioClose) {
+                console.log(`⏰ Ainda não passou o horário de apuração (${extracao.closeTime})`)
+                console.log(`⏸️  Pulando aposta ${aposta.id} - aguardando apuração`)
+                continue
+              }
+            }
+          }
+        }
+
         // Filtrar resultados por loteria/horário/data da aposta
         let resultadosFiltrados = resultados
 
         if (aposta.loteria) {
-          resultadosFiltrados = resultadosFiltrados.filter(
-            (r) => r.loteria?.toLowerCase().includes(aposta.loteria!.toLowerCase())
-          )
+          // Buscar nomes possíveis para match flexível
+          const extracaoId = parseInt(aposta.loteria, 10)
+          const extracao = !isNaN(extracaoId)
+            ? extracoes.find((e) => e.id === extracaoId)
+            : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria.toLowerCase())
+          const nomeExtracao = extracao?.name || aposta.loteria
+          const nomesPossiveis = extracaoNameMap[nomeExtracao] || [nomeExtracao.toLowerCase()]
+          
+          resultadosFiltrados = resultadosFiltrados.filter((r) => {
+            const loteriaResultado = (r.loteria || '').toLowerCase()
+            return nomesPossiveis.some((nome) => loteriaResultado.includes(nome.toLowerCase()))
+          })
+          
+          // Se não encontrou resultados, tentar match parcial por palavras-chave
+          if (resultadosFiltrados.length === 0 && extracao) {
+            const palavrasChave = nomeExtracao.split(' ').filter((p) => p.length > 2)
+            resultadosFiltrados = resultados.filter((r) => {
+              const loteriaResultado = (r.loteria || '').toLowerCase()
+              return palavrasChave.some((palavra) => loteriaResultado.includes(palavra.toLowerCase()))
+            })
+          }
+          
+          console.log(`- Loteria ID ${extracaoId} → Nome: "${nomeExtracao}" (ativa: ${extracao?.active ?? true})`)
+          console.log(`- Nomes possíveis para match: ${nomesPossiveis.join(', ')}`)
+          console.log(`- Após filtro de loteria "${nomeExtracao}": ${resultadosFiltrados.length} resultados (antes: ${resultados.length})`)
         }
 
         if (aposta.horario) {
@@ -306,17 +371,28 @@ export async function POST(request: NextRequest) {
 
         const modalityType = modalityMap[betData.modalityName || aposta.modalidade || ''] || 'GRUPO'
 
-        // Parsear posição
+        // Parsear posição (suporta posição personalizada)
+        const positionToUse = betData.customPosition && betData.customPositionValue 
+          ? betData.customPositionValue.trim() 
+          : betData.position
+        
         let pos_from = 1
         let pos_to = 1
-        if (betData.position) {
-          if (betData.position === '1st') {
+        if (positionToUse) {
+          if (positionToUse === '1st') {
             pos_from = 1
             pos_to = 1
-          } else if (betData.position.includes('-')) {
-            const [from, to] = betData.position.split('-').map(Number)
+          } else if (positionToUse.includes('-')) {
+            const [from, to] = positionToUse.split('-').map(Number)
             pos_from = from || 1
             pos_to = to || 1
+          } else {
+            // Posição única (ex: "7" -> pos_from=7, pos_to=7)
+            const singlePos = parseInt(positionToUse.replace(/º/g, '').replace(/\s/g, ''), 10)
+            if (!isNaN(singlePos) && singlePos >= 1 && singlePos <= 7) {
+              pos_from = singlePos
+              pos_to = singlePos
+            }
           }
         }
 

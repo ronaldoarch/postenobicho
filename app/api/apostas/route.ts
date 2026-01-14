@@ -129,16 +129,28 @@ export async function POST(request: Request) {
         const modalityType = modalityMap[betData.modalityName || ''] || 'GRUPO'
 
         // Parsear posição (ex: "1-5" -> pos_from=1, pos_to=5)
+        // Usa posição personalizada se disponível, senão usa posição padrão
+        const positionToUse = betData.customPosition && betData.customPositionValue 
+          ? betData.customPositionValue.trim() 
+          : betData.position
+        
         let pos_from = 1
         let pos_to = 1
-        if (betData.position) {
-          if (betData.position === '1st') {
+        if (positionToUse) {
+          if (positionToUse === '1st') {
             pos_from = 1
             pos_to = 1
-          } else if (betData.position.includes('-')) {
-            const [from, to] = betData.position.split('-').map(Number)
+          } else if (positionToUse.includes('-')) {
+            const [from, to] = positionToUse.split('-').map(Number)
             pos_from = from || 1
             pos_to = to || 1
+          } else {
+            // Posição única (ex: "7" -> pos_from=7, pos_to=7)
+            const singlePos = parseInt(positionToUse.replace(/º/g, '').replace(/\s/g, ''), 10)
+            if (!isNaN(singlePos) && singlePos >= 1 && singlePos <= 7) {
+              pos_from = singlePos
+              pos_to = singlePos
+            }
           }
         }
 
@@ -240,7 +252,9 @@ export async function POST(request: Request) {
           aposta: aposta || null,
           valor: valorNum,
           retornoPrevisto: premioTotal > 0 ? premioTotal : (retornoPrevisto ? Number(retornoPrevisto) : 0),
-          status: isInstant ? 'liquidado' : (status || 'pendente'),
+          // Aposta instantânea: liquidado se ganhou, perdida se não ganhou
+          // Aposta normal: pendente até ser liquidada pelo cron
+          status: isInstant ? (premioTotal > 0 ? 'liquidado' : 'perdida') : (status || 'pendente'),
           detalhes: {
             ...(detalhes && typeof detalhes === 'object' ? detalhes : {}),
             resultadoInstantaneo: resultadoInstantaneo,

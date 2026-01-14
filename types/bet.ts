@@ -44,6 +44,7 @@ export interface BetData {
   animalBets: number[][] // lista de palpites de animais (cada palpite é um array de IDs)
   position: string | null
   customPosition: boolean
+  customPositionValue?: string // Valor da posição personalizada (ex: "1-5", "7", "3")
   amount: number
   divisionType: 'all' | 'each'
   useBonus: boolean
