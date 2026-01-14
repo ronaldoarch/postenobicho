@@ -9,6 +9,10 @@ import {
 import { ANIMALS } from '@/data/animals'
 import { ResultadoItem } from '@/types/resultados'
 
+// Configurar timeout maior para operações longas
+export const maxDuration = 60 // 60 segundos
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/resultados/liquidar
  * 
@@ -121,10 +125,13 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Buscar resultados oficiais
+    // Buscar resultados oficiais (com timeout)
     const resultadosResponse = await fetch(
       `${process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'}`,
-      { cache: 'no-store' }
+      { 
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30000) // 30 segundos timeout
+      }
     )
 
     if (!resultadosResponse.ok) {
