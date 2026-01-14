@@ -121,9 +121,12 @@ model Usuario {
   saldo     Float    @default(0)
   bonus     Float    @default(0)
   bonusBloqueado Float @default(0)
+  rolloverNecessario Float @default(0) // quanto precisa apostar para liberar o bônus
+  rolloverAtual      Float @default(0) // quanto já apostou que conta para o rollover
   bonusSemanal Int   @default(0)
   ativo     Boolean  @default(true)
   saques    Saque[]
+  transacoes Transacao[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -134,6 +137,23 @@ model Saque {
   valor     Float
   status    String   @default("pendente") // pendente, aprovado, rejeitado
   motivo    String?
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([usuarioId])
+}
+
+model Transacao {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  tipo      String   // 'deposito', 'saque', etc.
+  status    String   @default("pendente") // pendente, pago, falhou
+  valor     Float
+  gatewayId Int?
+  descricao String?
+  bonusAplicado Float @default(0)
+  referenciaExterna String?
   usuario   Usuario  @relation(fields: [usuarioId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
