@@ -15,6 +15,12 @@ interface Extracao {
   days: string
 }
 
+type ExtracaoWithMeta = Extracao & {
+  closeStr?: string
+  closeDate?: Date
+  minutesToClose: number
+}
+
 interface LocationSelectionProps {
   instant: boolean
   location: string | null
