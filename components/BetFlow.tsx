@@ -20,7 +20,7 @@ const INITIAL_BET_DATA: BetData = {
   amount: 2.0,
   divisionType: 'all',
   useBonus: false,
-  bonusAmount: 1.6,
+  bonusAmount: 0,
   location: null,
   instant: false,
   specialTime: null,
@@ -48,8 +48,14 @@ export default function BetFlow() {
         const res = await fetch('/api/auth/me')
         const data = await res.json()
         setIsAuthenticated(Boolean(data?.user))
+        if (data?.user) {
+          setBetData((prev) => ({ ...prev, bonusAmount: data.user.bonus ?? 0 }))
+        } else {
+          setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
+        }
       } catch (error) {
         setIsAuthenticated(false)
+        setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
       }
     }
     loadMe()
