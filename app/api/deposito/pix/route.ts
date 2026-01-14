@@ -34,7 +34,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Criar pagamento PIX via Receba Online
+    // Documentação: https://docs.receba.online/
     // Ajuste o payload conforme a documentação oficial do Receba Online
+    const baseUrl = process.env.COOLIFY_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+    const webhookUrl = `${baseUrl}/api/webhooks/receba`
+
     const pixPayload = {
       amount: valor,
       description: `Depósito - ${user.nome}`,
@@ -45,13 +49,15 @@ export async function POST(req: NextRequest) {
       },
       externalId: `deposito_${user.id}_${Date.now()}`,
       // Webhook URL para notificações de pagamento
-      webhookUrl: `${process.env.COOLIFY_URL || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/webhooks/receba`,
+      webhookUrl: webhookUrl,
       metadata: {
         userId: user.id,
         email: user.email,
       },
     }
 
+    // Criar pagamento PIX via Receba Online
+    // A função recebaCreatePix tenta automaticamente vários endpoints
     const pixResponse = await recebaCreatePix({}, pixPayload)
 
     // A resposta do Receba Online deve conter o QR code e outros dados

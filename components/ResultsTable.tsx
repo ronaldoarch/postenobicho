@@ -59,15 +59,15 @@ export default function ResultsTable({
             </tr>
           ) : (
             rows.map((result, index) => (
-              <tr
-                key={index}
-                className="border-b border-gray-100 hover:bg-blue/5 transition-colors"
-              >
-                <td className="px-4 py-3 font-bold text-blue">{result.position}</td>
-                <td className="px-4 py-3 font-semibold text-gray-950">{result.milhar}</td>
-                <td className="px-4 py-3 text-gray-700">{result.grupo}</td>
-                <td className="px-4 py-3 text-gray-700">{result.animal}</td>
-              </tr>
+            <tr
+              key={index}
+              className="border-b border-gray-100 hover:bg-blue/5 transition-colors"
+            >
+              <td className="px-4 py-3 font-bold text-blue">{result.position}</td>
+              <td className="px-4 py-3 font-semibold text-gray-950">{result.milhar}</td>
+              <td className="px-4 py-3 text-gray-700">{result.grupo}</td>
+              <td className="px-4 py-3 text-gray-700">{result.animal}</td>
+            </tr>
             ))
           )}
         </tbody>
