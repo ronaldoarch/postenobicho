@@ -1,6 +1,18 @@
 'use client'
 
-import { LOCATIONS, SPECIAL_TIMES } from '@/data/modalities'
+import { useEffect, useMemo, useState } from 'react'
+import { SPECIAL_TIMES } from '@/data/modalities'
+
+interface Extracao {
+  id: number
+  name: string
+  realCloseTime?: string
+  closeTime: string
+  time: string
+  active: boolean
+  max: number
+  days: string
+}
 
 interface LocationSelectionProps {
   instant: boolean
@@ -11,6 +23,8 @@ interface LocationSelectionProps {
   onSpecialTimeChange: (timeId: string | null) => void
 }
 
+const CLOSE_THRESHOLD_MINUTES = 5
+
 export default function LocationSelection({
   instant,
   location,
@@ -19,9 +33,57 @@ export default function LocationSelection({
   onLocationChange,
   onSpecialTimeChange,
 }: LocationSelectionProps) {
+  const [extracoes, setExtracoes] = useState<Extracao[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/admin/extracoes')
+        const data = await res.json()
+        setExtracoes((data?.extracoes || []).filter((e: Extracao) => e.active))
+      } catch (error) {
+        console.error('Erro ao carregar extrações', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+    const timer = setInterval(load, 60_000) // refresca a cada 1 min para trocar automática
+    return () => clearInterval(timer)
+  }, [])
+
+  const now = Date.now()
+
+  const normalized = useMemo(() => {
+    return extracoes
+      .map((e) => {
+        const closeStr = e.realCloseTime || e.closeTime || e.time
+        const closeDate = parseTimeToday(closeStr)
+        const minutesToClose = closeDate ? (closeDate.getTime() - now) / 60000 : Number.POSITIVE_INFINITY
+        return { ...e, closeStr, closeDate, minutesToClose }
+      })
+      .sort((a, b) => (a.closeDate?.getTime() || 0) - (b.closeDate?.getTime() || 0))
+  }, [extracoes, now])
+
+  const available = normalized.filter((e) => e.minutesToClose > CLOSE_THRESHOLD_MINUTES)
+
+  useEffect(() => {
+    if (available.length === 0 && normalized.length === 0) return
+    const current =
+      available.find((e) => e.id.toString() === location) ||
+      (available.length > 0 ? available[0] : normalized[0])
+    if (!location && current) {
+      onLocationChange(current.id.toString())
+    }
+    if (location && current && current.id.toString() !== location) {
+      onLocationChange(current.id.toString())
+    }
+  }, [available, normalized, location, onLocationChange])
+
   return (
     <div>
-      <h2 className="mb-6 text-xl font-bold text-gray-950">Selecione a localização e horário:</h2>
+      <h2 className="mb-6 text-xl font-bold text-gray-950">Selecione a extração e horário:</h2>
 
       {/* Instant Checkbox */}
       <div className="mb-6">
@@ -36,27 +98,61 @@ export default function LocationSelection({
         </label>
       </div>
 
-      {/* Locations */}
+      {/* Extrações do banco */}
       <div className="mb-6">
-        <h3 className="mb-4 text-lg font-semibold text-gray-950">Localizações:</h3>
+        <h3 className="mb-4 text-lg font-semibold text-gray-950">Extrações ativas (troca automática perto do fechamento):</h3>
+
+        {loading && <p className="text-sm text-gray-500">Carregando extrações...</p>}
+
+        {!loading && normalized.length === 0 && (
+          <p className="text-sm text-red-600">Nenhuma extração encontrada.</p>
+        )}
+
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {LOCATIONS.map((loc) => (
-            <button
-              key={loc.id}
-              onClick={() => onLocationChange(loc.id)}
-              className={`flex items-center justify-center gap-3 rounded-lg border-2 p-4 transition-all hover:scale-105 ${
-                location === loc.id
-                  ? 'border-blue bg-blue/10 shadow-lg'
-                  : 'border-gray-200 bg-white hover:border-blue/50'
-              }`}
-            >
-              <span className="font-semibold text-gray-950">{loc.name}</span>
-            </button>
-          ))}
+          {normalized.map((ext) => {
+            const isSelected = location === ext.id.toString()
+            const isClosingSoon = ext.minutesToClose <= CLOSE_THRESHOLD_MINUTES && ext.minutesToClose > 0
+            const closed = ext.minutesToClose <= 0
+            return (
+              <button
+                key={ext.id}
+                onClick={() => !closed && onLocationChange(ext.id.toString())}
+                disabled={closed}
+                className={`flex flex-col items-start rounded-lg border-2 p-4 transition-all ${
+                  isSelected ? 'border-blue bg-blue/10 shadow-lg' : 'border-gray-200 bg-white hover:border-blue/50'
+                } ${closed ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'}`}
+              >
+                <div className="flex w-full items-center justify-between">
+                  <span className="font-semibold text-gray-950">{ext.name}</span>
+                  <span className="text-xs font-medium text-gray-500">#{ext.id}</span>
+                </div>
+                <div className="mt-1 text-sm text-gray-700">
+                  Fecha às <strong>{ext.closeStr}</strong>
+                  {ext.realCloseTime && ext.realCloseTime !== ext.closeTime && (
+                    <span className="text-xs text-gray-500"> (real: {ext.realCloseTime})</span>
+                  )}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">Dias: {ext.days}</div>
+                {closed ? (
+                  <span className="mt-2 inline-flex w-fit rounded-full bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-600">
+                    Encerrada
+                  </span>
+                ) : isClosingSoon ? (
+                  <span className="mt-2 inline-flex w-fit rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                    Fechando em {Math.max(1, Math.floor(ext.minutesToClose))} min
+                  </span>
+                ) : (
+                  <span className="mt-2 inline-flex w-fit rounded-full bg-green-100 px-2 py-1 text-xs font-semibold text-green-700">
+                    Aberta
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Special Times */}
+      {/* Horários especiais */}
       {!instant && (
         <div className="mb-6">
           <h3 className="mb-4 text-lg font-semibold text-gray-950">Horários Especiais:</h3>
@@ -84,4 +180,13 @@ export default function LocationSelection({
       )}
     </div>
   )
+}
+
+function parseTimeToday(time: string | undefined) {
+  if (!time) return undefined
+  const [h, m] = time.split(':').map((v) => parseInt(v, 10))
+  if (Number.isNaN(h) || Number.isNaN(m)) return undefined
+  const d = new Date()
+  d.setHours(h, m, 0, 0)
+  return d
 }

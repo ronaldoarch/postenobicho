@@ -39,9 +39,9 @@ export const POSITIONS: Position[] = [
 ]
 
 export const LOCATIONS: Location[] = [
-  { id: 'brasil', name: 'Brasil Lot Bicho', flag: '🇧🇷' },
-  { id: 'df', name: 'Distrito Federal', flag: '🏛️' },
-  { id: 'goias', name: 'Goiás', flag: '🌾' },
+  { id: 'brasil', name: 'Brasil Lot Bicho' },
+  { id: 'df', name: 'Distrito Federal' },
+  { id: 'goias', name: 'Goiás' },
 ]
 
 export const SPECIAL_TIMES = [
