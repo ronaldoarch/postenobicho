@@ -6,11 +6,12 @@ import { BetData } from '@/types/bet'
 
 interface BetConfirmationProps {
   betData: BetData
+  saldoDisponivel?: number
   onConfirm: () => void
   onBack: () => void
 }
 
-export default function BetConfirmation({ betData, onConfirm, onBack }: BetConfirmationProps) {
+export default function BetConfirmation({ betData, saldoDisponivel, onConfirm, onBack }: BetConfirmationProps) {
   const selectedGroups = betData.animalBets || []
   const flatSelectedIds = selectedGroups.flat()
   const selectedAnimals = ANIMALS.filter((animal) => flatSelectedIds.includes(animal.id))
@@ -119,6 +120,26 @@ export default function BetConfirmation({ betData, onConfirm, onBack }: BetConfi
             <span className="text-xl font-bold text-gray-950">Total:</span>
             <span className="text-2xl font-extrabold text-blue">R$ {total.toFixed(2)}</span>
           </div>
+          {saldoDisponivel !== undefined && (
+            <div className="mt-3 rounded-lg p-3 bg-gray-50">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">Saldo disponível:</span>
+                <span className={`font-semibold ${total > saldoDisponivel ? 'text-red-600' : 'text-green-600'}`}>
+                  R$ {saldoDisponivel.toFixed(2)}
+                </span>
+              </div>
+              {total > saldoDisponivel && (
+                <div className="mt-2 rounded-lg bg-red-50 border-2 border-red-200 p-3">
+                  <p className="text-sm font-semibold text-red-800">
+                    ⚠️ Saldo insuficiente!
+                  </p>
+                  <p className="text-xs text-red-700 mt-1">
+                    Faltam R$ {(total - saldoDisponivel).toFixed(2)} para completar esta aposta.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -132,9 +153,10 @@ export default function BetConfirmation({ betData, onConfirm, onBack }: BetConfi
         </button>
         <button
           onClick={onConfirm}
-          className="flex-1 rounded-lg bg-yellow px-6 py-3 font-bold text-blue-950 hover:bg-yellow/90 transition-colors"
+          disabled={saldoDisponivel !== undefined && total > saldoDisponivel}
+          className="flex-1 rounded-lg bg-yellow px-6 py-3 font-bold text-blue-950 hover:bg-yellow/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400"
         >
-          Confirmar Aposta
+          {saldoDisponivel !== undefined && total > saldoDisponivel ? 'Saldo Insuficiente' : 'Confirmar Aposta'}
         </button>
       </div>
     </div>

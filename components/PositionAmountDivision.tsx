@@ -9,6 +9,8 @@ interface PositionAmountDivisionProps {
   divisionType: 'all' | 'each'
   useBonus: boolean
   bonusAmount: number
+  saldoDisponivel?: number
+  qtdPalpites?: number
   onPositionChange: (position: string) => void
   onCustomPositionChange: (checked: boolean) => void
   onAmountChange: (amount: number) => void
@@ -23,6 +25,8 @@ export default function PositionAmountDivision({
   divisionType,
   useBonus,
   bonusAmount,
+  saldoDisponivel,
+  qtdPalpites = 0,
   onPositionChange,
   onCustomPositionChange,
   onAmountChange,
@@ -32,8 +36,27 @@ export default function PositionAmountDivision({
   const increment = 0.5
   const minAmount = 0.5
 
+  const calcularValorTotal = (valor: number) => {
+    let total = valor
+    if (divisionType === 'each') {
+      total = valor * qtdPalpites
+    }
+    if (useBonus && bonusAmount > 0) {
+      total = Math.max(0, total - bonusAmount)
+    }
+    return total
+  }
+
   const handleIncrease = () => {
-    onAmountChange(amount + increment)
+    const novoValor = amount + increment
+    const valorTotal = calcularValorTotal(novoValor)
+    
+    if (saldoDisponivel !== undefined && valorTotal > saldoDisponivel) {
+      // Não permite aumentar além do saldo
+      return
+    }
+    
+    onAmountChange(novoValor)
   }
 
   const handleDecrease = () => {
@@ -41,6 +64,9 @@ export default function PositionAmountDivision({
       onAmountChange(amount - increment)
     }
   }
+
+  const valorTotal = calcularValorTotal(amount)
+  const excedeSaldo = saldoDisponivel !== undefined && valorTotal > saldoDisponivel
 
   return (
     <div>
@@ -107,9 +133,23 @@ export default function PositionAmountDivision({
               step={increment}
               value={amount}
               onChange={(e) => onAmountChange(parseFloat(e.target.value) || minAmount)}
-              className="w-full rounded-lg border-2 border-gray-300 px-4 py-3 text-center text-xl font-bold text-gray-950 focus:border-blue focus:outline-none"
+              className={`w-full rounded-lg border-2 px-4 py-3 text-center text-xl font-bold text-gray-950 focus:outline-none ${
+                excedeSaldo ? 'border-red-500 bg-red-50' : 'border-gray-300 focus:border-blue'
+              }`}
             />
             <p className="mt-1 text-xs text-gray-500">Incremento: R$ {increment.toFixed(2)}</p>
+            {saldoDisponivel !== undefined && (
+              <div className="mt-2">
+                <p className="text-xs text-gray-600">
+                  Valor total: R$ {valorTotal.toFixed(2)} | Saldo: R$ {saldoDisponivel.toFixed(2)}
+                </p>
+                {excedeSaldo && (
+                  <p className="mt-1 text-xs font-semibold text-red-600">
+                    ⚠️ Valor excede o saldo disponível em R$ {(valorTotal - saldoDisponivel).toFixed(2)}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <button
             onClick={handleIncrease}

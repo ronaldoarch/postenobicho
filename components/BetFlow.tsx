@@ -12,6 +12,7 @@ import PositionAmountDivision from './PositionAmountDivision'
 import LocationSelection from './LocationSelection'
 import BetConfirmation from './BetConfirmation'
 import InstantResultModal from './InstantResultModal'
+import AlertModal from './AlertModal'
 
 const INITIAL_BET_DATA: BetData = {
   modality: null,
@@ -35,6 +36,9 @@ export default function BetFlow() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [showInstantResult, setShowInstantResult] = useState(false)
   const [instantResult, setInstantResult] = useState<{ prizes: number[]; groups: number[]; premioTotal: number } | null>(null)
+  const [userSaldo, setUserSaldo] = useState<number>(0)
+  const [showAlert, setShowAlert] = useState(false)
+  const [alertMessage, setAlertMessage] = useState({ title: '', message: '' })
 
   const MAX_PALPITES = 10
 
@@ -53,12 +57,15 @@ export default function BetFlow() {
         setIsAuthenticated(Boolean(data?.user))
         if (data?.user) {
           setBetData((prev) => ({ ...prev, bonusAmount: data.user.bonus ?? 0 }))
+          setUserSaldo(data.user.saldo ?? 0)
         } else {
           setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
+          setUserSaldo(0)
         }
       } catch (error) {
         setIsAuthenticated(false)
         setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
+        setUserSaldo(0)
       }
     }
     loadMe()
@@ -97,7 +104,41 @@ export default function BetFlow() {
     }))
   }
 
+  const calcularValorTotalAposta = () => {
+    let valorTotal = betData.amount
+    if (betData.divisionType === 'each') {
+      valorTotal = betData.amount * betData.animalBets.length
+    }
+    if (betData.useBonus && betData.bonusAmount > 0) {
+      valorTotal = Math.max(0, valorTotal - betData.bonusAmount)
+    }
+    return valorTotal
+  }
+
+  const validarSaldo = () => {
+    if (!isAuthenticated) return true // Se não está logado, validação será no backend
+    
+    const valorTotal = calcularValorTotalAposta()
+    const saldoDisponivel = userSaldo + (betData.useBonus ? betData.bonusAmount : 0)
+    
+    return valorTotal <= saldoDisponivel
+  }
+
   const handleConfirm = () => {
+    // Validar saldo antes de confirmar
+    if (!validarSaldo()) {
+      const valorTotal = calcularValorTotalAposta()
+      const saldoDisponivel = userSaldo + (betData.useBonus ? betData.bonusAmount : 0)
+      const falta = valorTotal - saldoDisponivel
+      
+      setAlertMessage({
+        title: 'Saldo Insuficiente',
+        message: `Você não tem saldo suficiente para esta aposta.\n\nValor da aposta: R$ ${valorTotal.toFixed(2)}\nSaldo disponível: R$ ${saldoDisponivel.toFixed(2)}\nFalta: R$ ${falta.toFixed(2)}\n\nPor favor, faça um depósito ou ajuste o valor da aposta.`,
+      })
+      setShowAlert(true)
+      return
+    }
+
     const modalityName = MODALITIES.find((m) => String(m.id) === betData.modality)?.name || 'Modalidade'
     const animalNames = betData.animalBets
       .map((grp) =>
@@ -232,6 +273,8 @@ export default function BetFlow() {
             divisionType={betData.divisionType}
             useBonus={betData.useBonus}
             bonusAmount={betData.bonusAmount}
+            saldoDisponivel={isAuthenticated ? userSaldo + (betData.useBonus ? betData.bonusAmount : 0) : undefined}
+            qtdPalpites={betData.animalBets.length}
             onPositionChange={(pos) => setBetData((prev) => ({ ...prev, position: pos }))}
             onCustomPositionChange={(checked) =>
               setBetData((prev) => ({ ...prev, customPosition: checked }))
@@ -256,7 +299,12 @@ export default function BetFlow() {
 
       case 5:
         return (
-          <BetConfirmation betData={betData} onConfirm={handleConfirm} onBack={handleBack} />
+          <BetConfirmation 
+            betData={betData} 
+            saldoDisponivel={isAuthenticated ? userSaldo + (betData.useBonus ? betData.bonusAmount : 0) : undefined}
+            onConfirm={handleConfirm} 
+            onBack={handleBack} 
+          />
         )
 
       default:
@@ -318,6 +366,15 @@ export default function BetFlow() {
           setInstantResult(null)
         }}
         resultado={instantResult}
+      />
+
+      <AlertModal
+        isOpen={showAlert}
+        title={alertMessage.title}
+        message={alertMessage.message}
+        type="error"
+        onClose={() => setShowAlert(false)}
+        autoClose={5000}
       />
     </div>
   )
