@@ -9,6 +9,7 @@ import {
   type ModalityType,
 } from '@/lib/bet-rules-engine'
 import { ANIMALS } from '@/data/animals'
+import { verificarLimiteDescarga } from '@/lib/descarga'
 
 export async function GET() {
   const session = cookies().get('lotbicho_session')?.value
@@ -118,6 +119,11 @@ export async function POST(request: Request) {
           'Milhar/Centena': 'MILHAR_CENTENA',
           'Passe vai': 'PASSE',
           'Passe vai e vem': 'PASSE_VAI_E_VEM',
+          'Quadra de Dezena': 'QUADRA_DEZENA',
+          'Duque de Dezena (EMD)': 'DUQUE_DEZENA_EMD',
+          'Terno de Dezena (EMD)': 'TERNO_DEZENA_EMD',
+          'Dezeninha': 'DEZENINHA',
+          'Terno de Grupo Seco': 'TERNO_GRUPO_SECO',
         }
 
         const modalityType = modalityMap[betData.modalityName || ''] || 'GRUPO'
@@ -133,6 +139,21 @@ export async function POST(request: Request) {
             const [from, to] = betData.position.split('-').map(Number)
             pos_from = from || 1
             pos_to = to || 1
+          }
+        }
+
+        // Verificar limites de descarga para cada prêmio no intervalo
+        const modalidadeNome = betData.modalityName || aposta.modalidade || ''
+        for (let premio = pos_from; premio <= pos_to && premio <= 5; premio++) {
+          const verificacao = await verificarLimiteDescarga(
+            modalidadeNome,
+            premio,
+            valorNum
+          )
+          
+          // Não bloqueia a aposta, apenas cria alerta se exceder
+          if (verificacao.excedeu) {
+            console.warn(`⚠️ Limite de descarga excedido: ${modalidadeNome} - ${premio}º prêmio`, verificacao.alerta)
           }
         }
 

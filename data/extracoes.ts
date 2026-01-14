@@ -1,11 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { extracoes, type Extracao } from '@/data/extracoes'
-
-export const dynamic = 'force-dynamic'
+export interface Extracao {
+  id: number
+  name: string
+  estado?: string
+  realCloseTime?: string
+  closeTime: string
+  time: string
+  active: boolean
+  max: number
+  days: string
+}
 
 // Lista completa de 46 extrações com Close Time e Real Close Time
-// Agora importada de /data/extracoes.ts
-const extracoesList = [...extracoes]
+export const extracoes: Extracao[] = [
   { id: 1, name: 'LOTECE', estado: 'CE', realCloseTime: '10:26', closeTime: '11:00', time: '11:00', active: true, max: 10, days: 'Seg, Ter, Qua, Sex, Sáb' },
   { id: 2, name: 'LOTECE', estado: 'CE', realCloseTime: '13:25', closeTime: '14:00', time: '14:00', active: true, max: 10, days: 'Seg, Ter, Qua, Sex, Sáb' },
   { id: 3, name: 'LOTECE', estado: 'CE', realCloseTime: '19:10', closeTime: '19:40', time: '19:40', active: true, max: 10, days: 'Seg, Ter, Qua, Sex, Sáb' },
@@ -51,20 +57,5 @@ const extracoesList = [...extracoes]
   { id: 43, name: 'PT SP', estado: 'SP', realCloseTime: '13:11', closeTime: '13:15', time: '13:15', active: true, max: 10, days: 'Seg, Ter, Qua, Sex, Sáb, Dom' },
   { id: 44, name: 'PT SP (Band)', estado: 'SP', realCloseTime: '15:11', closeTime: '15:15', time: '15:15', active: true, max: 10, days: 'Seg, Ter, Qua, Sex, Sáb' },
   { id: 45, name: 'PT SP', estado: 'SP', realCloseTime: '17:11', closeTime: '17:15', time: '17:15', active: true, max: 10, days: 'Seg, Ter, Qua, Sex, Sáb' },
-export async function GET() {
-  return NextResponse.json({ extracoes: extracoesList, total: extracoesList.length })
-}
-
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const index = extracoesList.findIndex((e) => e.id === body.id)
-    if (index === -1) {
-      return NextResponse.json({ error: 'Extração não encontrada' }, { status: 404 })
-    }
-    extracoesList[index] = { ...extracoesList[index], ...body }
-    return NextResponse.json({ extracao: extracoesList[index], message: 'Extração atualizada com sucesso' })
-  } catch (error) {
-    return NextResponse.json({ error: 'Erro ao atualizar extração' }, { status: 500 })
-  }
-}
+  { id: 46, name: 'PT SP', estado: 'SP', realCloseTime: '20:11', closeTime: '20:15', time: '20:15', active: true, max: 10, days: 'Seg, Ter, Sex' },
+]

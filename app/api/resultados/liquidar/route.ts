@@ -5,13 +5,12 @@ import {
   calcularValorPorPalpite,
   type ModalityType,
   type InstantResult,
+  calcularPremioUnidade,
+  buscarOdd,
 } from '@/lib/bet-rules-engine'
 import { ANIMALS } from '@/data/animals'
 import { ResultadoItem } from '@/types/resultados'
-
-// Configurar timeout maior para operações longas
-export const maxDuration = 60 // 60 segundos
-export const dynamic = 'force-dynamic'
+import { verificarMilharCotada, verificarCentenaCotada, extrairCentena } from '@/lib/cotacao'
 
 /**
  * GET /api/resultados/liquidar
@@ -125,21 +124,49 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Buscar resultados oficiais (com timeout)
-    const resultadosResponse = await fetch(
-      `${process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'}`,
-      { 
+    // Buscar resultados oficiais
+    // Usar API interna primeiro (mais rápido), com fallback para API externa
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
+                   (request.headers.get('host') ? `https://${request.headers.get('host')}` : 'http://localhost:3000')
+    
+    let resultados: ResultadoItem[] = []
+    let resultadosData: any = null
+    
+    try {
+      // Tentar API interna primeiro (timeout de 30s)
+      const resultadosResponse = await fetch(`${baseUrl}/api/resultados`, {
         cache: 'no-store',
-        signal: AbortSignal.timeout(30000) // 30 segundos timeout
+        signal: AbortSignal.timeout(30000),
+      })
+      
+      if (resultadosResponse.ok) {
+        resultadosData = await resultadosResponse.json()
+        resultados = resultadosData.results || resultadosData.resultados || []
       }
-    )
-
-    if (!resultadosResponse.ok) {
-      throw new Error('Erro ao buscar resultados oficiais')
+    } catch (error) {
+      console.warn('⚠️ Erro ao buscar resultados da API interna, tentando API externa:', error)
     }
+    
+    // Fallback para API externa se necessário
+    if (resultados.length === 0) {
+      try {
+        const resultadosResponse = await fetch(
+          `${process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'}`,
+          { 
+            cache: 'no-store',
+            signal: AbortSignal.timeout(30000),
+          }
+        )
 
-    const resultadosData = await resultadosResponse.json()
-    const resultados: ResultadoItem[] = resultadosData.results || resultadosData.resultados || []
+        if (resultadosResponse.ok) {
+          resultadosData = await resultadosResponse.json()
+          resultados = resultadosData.results || resultadosData.resultados || []
+        }
+      } catch (error) {
+        console.error('❌ Erro ao buscar resultados da API externa:', error)
+        throw new Error('Erro ao buscar resultados oficiais')
+      }
+    }
 
     if (resultados.length === 0) {
       return NextResponse.json({
@@ -165,6 +192,11 @@ export async function POST(request: NextRequest) {
       'Milhar/Centena': 'MILHAR_CENTENA',
       'Passe vai': 'PASSE',
       'Passe vai e vem': 'PASSE_VAI_E_VEM',
+      'Quadra de Dezena': 'QUADRA_DEZENA',
+      'Duque de Dezena (EMD)': 'DUQUE_DEZENA_EMD',
+      'Terno de Dezena (EMD)': 'TERNO_DEZENA_EMD',
+      'Dezeninha': 'DEZENINHA',
+      'Terno de Grupo Seco': 'TERNO_GRUPO_SECO',
     }
 
     let processadas = 0
@@ -188,11 +220,29 @@ export async function POST(request: NextRequest) {
         }
 
         if (aposta.dataConcurso) {
+          // Normalizar formato de data da aposta (ISO: 2026-01-14)
           const dataAposta = aposta.dataConcurso.toISOString().split('T')[0]
+          const [anoAposta, mesAposta, diaAposta] = dataAposta.split('-')
+          const dataApostaFormatada = `${diaAposta}/${mesAposta}/${anoAposta}` // Formato BR: 14/01/2026
+          
           resultadosFiltrados = resultadosFiltrados.filter((r) => {
-            if (!r.date && !r.dataExtracao) return false
-            const dataResultado = (r.date || r.dataExtracao)?.split('T')[0]
-            return dataResultado === dataAposta
+            const dataResultado = r.date || r.dataExtracao || ''
+            if (!dataResultado) return false
+            
+            // Comparar formato ISO (2026-01-14)
+            if (dataResultado.split('T')[0] === dataAposta) return true
+            
+            // Comparar formato brasileiro (14/01/2026)
+            if (dataResultado === dataApostaFormatada) return true
+            
+            // Comparação parcial (dia/mês/ano)
+            const matchBR = dataResultado.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+            if (matchBR) {
+              const [_, dia, mes, ano] = matchBR
+              if (`${ano}-${mes}-${dia}` === dataAposta) return true
+            }
+            
+            return false
           })
         }
 
@@ -315,7 +365,44 @@ export async function POST(request: NextRequest) {
             betData.divisionType
           )
 
-          premioTotalAposta += conferencia.totalPrize
+          // Verificar se milhar ou centena está cotada APENAS SE GANHOU
+          // A verificação ocorre no momento da apuração, verificando o número que ganhou
+          let premioFinal = conferencia.totalPrize
+          
+          if (conferencia.totalPrize > 0 && (modalityType === 'MILHAR' || modalityType === 'CENTENA' || modalityType === 'MILHAR_CENTENA')) {
+            // Verificar cotações para cada prêmio que ganhou
+            for (let pos = pos_from - 1; pos < pos_to && pos < resultadoOficial.prizes.length; pos++) {
+              const premioGanho = resultadoOficial.prizes[pos]
+              const premioStr = premioGanho.toString().padStart(4, '0')
+              
+              if (modalityType === 'MILHAR') {
+                const milharCotada = await verificarMilharCotada(premioStr)
+                if (milharCotada) {
+                  // Aplicar redução de 1/6 apenas no prêmio desta posição
+                  // Como já calculamos o prêmio total, aplicamos a redução proporcional
+                  premioFinal = premioFinal / 6
+                  break // Apenas precisa verificar uma vez
+                }
+              } else if (modalityType === 'CENTENA') {
+                const centenaStr = premioStr.slice(-3)
+                const centenaCotada = await verificarCentenaCotada(centenaStr)
+                if (centenaCotada) {
+                  premioFinal = premioFinal / 6
+                  break
+                }
+              } else if (modalityType === 'MILHAR_CENTENA') {
+                const milharCotada = await verificarMilharCotada(premioStr)
+                const centenaStr = premioStr.slice(-3)
+                const centenaCotada = await verificarCentenaCotada(centenaStr)
+                if (milharCotada || centenaCotada) {
+                  premioFinal = premioFinal / 6
+                  break
+                }
+              }
+            }
+          }
+
+          premioTotalAposta += premioFinal
         }
 
         // Atualizar aposta e saldo do usuário

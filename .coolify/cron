@@ -1,0 +1,8 @@
+# Cron Jobs - Poste no Bicho
+# Liquidação automática de apostas
+
+# Executa a cada 5 minutos durante horários de sorteio (9h-22h)
+*/5 9-22 * * * bash /app/scripts/cron/liquidar.sh >> /app/logs/cron.log 2>&1
+
+# Executa a cada 10 minutos durante madrugada (0h-8h)
+*/10 0-8 * * * bash /app/scripts/cron/liquidar.sh >> /app/logs/cron.log 2>&1

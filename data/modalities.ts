@@ -21,6 +21,11 @@ export const MODALITIES: Modality[] = [
   { id: 15, name: 'Dezena Invertida', value: '1x R$ 60.00', hasLink: false },
   { id: 8, name: 'Passe vai', value: '1x R$ 90.00', hasLink: false },
   { id: 16, name: 'Passe vai e vem', value: '1x R$ 90.00', hasLink: false },
+  { id: 17, name: 'Quadra de Dezena', value: '1x R$ 300.00', hasLink: false },
+  { id: 18, name: 'Duque de Dezena (EMD)', value: '1x R$ 300.00', hasLink: false },
+  { id: 19, name: 'Terno de Dezena (EMD)', value: '1x R$ 5000.00', hasLink: false },
+  { id: 20, name: 'Dezeninha', value: 'Variável', hasLink: false },
+  { id: 21, name: 'Terno de Grupo Seco', value: '1x R$ 150.00', hasLink: false },
 ]
 
 export const SPECIAL_QUOTATIONS: SpecialQuotation[] = [

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Script de liquidação automática para cron job
+# Script de liquidação automática para cron job - Poste no Bicho
 # 
 # Uso: Adicionar ao crontab para execução periódica
-# Exemplo: */5 9-22 * * * /caminho/para/lotbicho/scripts/cron/liquidar.sh
+# Exemplo: */5 9-22 * * * /caminho/para/postenobicho/scripts/cron/liquidar.sh
 
 # Configurações
 # NOTA: localhost funciona aqui porque o script roda dentro do mesmo container

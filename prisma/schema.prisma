@@ -92,13 +92,54 @@ model Tema {
 
 model Configuracao {
   id              Int      @id @default(autoincrement())
-  nomePlataforma  String   @default("Lot Bicho")
+  nomePlataforma  String   @default("Poste no Bicho")
   numeroSuporte   String   @default("(00) 00000-0000")
-  emailSuporte    String   @default("suporte@lotbicho.com")
+  emailSuporte    String   @default("suporte@postenobicho.com")
   whatsappSuporte String   @default("5500000000000")
   logoSite        String?  @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model LimiteDescarga {
+  id              Int      @id @default(autoincrement())
+  modalidade      String   // Nome da modalidade
+  premio          Int      // 1 ao 5 (prêmio)
+  limite          Float    // Limite em R$
+  ativo           Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([modalidade, premio])
+  @@index([modalidade])
+}
+
+model AlertaDescarga {
+  id              Int      @id @default(autoincrement())
+  modalidade      String
+  premio          Int
+  valorAtual      Float    // Valor total apostado
+  limite          Float    // Limite configurado
+  excedente       Float    // Valor que excedeu o limite
+  resolvido       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@index([modalidade, premio])
+  @@index([resolvido])
+  @@index([createdAt])
+}
+
+model CotacaoEspecial {
+  id              Int      @id @default(autoincrement())
+  tipo            String   // 'milhar' ou 'centena'
+  numero          String   // Número cotado (ex: "2026" para milhar, "026" para centena)
+  ativo           Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([tipo, numero])
+  @@index([tipo, ativo])
 }
 
 model Gateway {

@@ -24,6 +24,11 @@ export type ModalityType =
   | 'MILHAR_CENTENA'
   | 'PASSE'
   | 'PASSE_VAI_E_VEM'
+  | 'QUADRA_DEZENA'
+  | 'DUQUE_DEZENA_EMD'
+  | 'TERNO_DEZENA_EMD'
+  | 'DEZENINHA'
+  | 'TERNO_GRUPO_SECO'
 
 export type DivisionType = 'all' | 'each'
 
@@ -392,6 +397,38 @@ export function buscarOdd(
       '1-3': 3300,
       '1-5': 3300,
     },
+    QUADRA_DEZENA: {
+      '1-1': 300,
+      '1-3': 300,
+      '1-5': 300,
+      '1-7': 300,
+    },
+    DUQUE_DEZENA_EMD: {
+      '1-1': 300,
+      '1-3': 300,
+      '1-5': 300,
+      '1-7': 300,
+    },
+    TERNO_DEZENA_EMD: {
+      '1-1': 5000,
+      '1-3': 5000,
+      '1-5': 5000,
+      '1-7': 5000,
+    },
+    DEZENINHA: {
+      '1-1': 15,   // 3 dezenas: 15x1
+      '1-3': 15,
+      '1-5': 15,
+      '1-7': 15,
+      // Nota: multiplicadores variam conforme quantidade de dezenas selecionadas
+      // 3 dezenas → 15x1, 4 dezenas → 150x1, 5 dezenas → 1500x1
+    },
+    TERNO_GRUPO_SECO: {
+      '1-1': 150,
+      '1-3': 150,
+      '1-5': 150,
+      '1-7': 150,
+    },
   }
   
   const modalidadeOdds = oddsTable[modalidade]
@@ -408,10 +445,34 @@ export function buscarOdd(
 }
 
 /**
- * Calcula o prêmio por unidade.
+ * Calcula o multiplicador da Dezeninha baseado na quantidade de dezenas selecionadas.
  */
-export function calcularPremioUnidade(odd: number, valorUnitario: number): number {
-  return odd * valorUnitario
+export function calcularMultiplicadorDezeninha(qtdDezenas: number): number {
+  if (qtdDezenas === 3) return 15
+  if (qtdDezenas === 4) return 150
+  if (qtdDezenas === 5) return 1500
+  return 15 // Padrão para 3 dezenas
+}
+
+/**
+ * Calcula o prêmio por unidade.
+ * Se a modalidade for MILHAR ou CENTENA e estiver cotada, aplica redução de 1/6.
+ */
+export function calcularPremioUnidade(
+  odd: number,
+  valorUnitario: number,
+  modalidade?: ModalityType,
+  numeroApostado?: string,
+  estaCotada?: boolean
+): number {
+  let premioBase = odd * valorUnitario
+  
+  // Aplicar redução de 1/6 se milhar ou centena estiver cotada
+  if (estaCotada && (modalidade === 'MILHAR' || modalidade === 'CENTENA')) {
+    premioBase = premioBase / 6
+  }
+  
+  return premioBase
 }
 
 /**
@@ -430,13 +491,15 @@ export function calcularPremioPalpite(
 
 /**
  * Confere um palpite de número (dezena, centena, milhar) contra resultado.
+ * @param estaCotada - Se true, aplica redução de 1/6 no prêmio (para MILHAR e CENTENA)
  */
 export function conferirNumero(
   resultado: number[],
   numeroApostado: string,
   modalidade: ModalityType,
   pos_from: number,
-  pos_to: number
+  pos_to: number,
+  estaCotada?: boolean
 ): PrizeCalculation {
   const invertida = modalidade.includes('INVERTIDA')
   let combinations: string[] = [numeroApostado]
@@ -678,6 +741,9 @@ export function conferirPalpite(
       prize = conferirTernoGrupo(resultado.prizes, palpite.grupos!, pos_from, pos_to)
     } else if (modalidade === 'QUADRA_GRUPO') {
       prize = conferirQuadraGrupo(resultado.prizes, palpite.grupos!, pos_from, pos_to)
+    } else if (modalidade === 'TERNO_GRUPO_SECO') {
+      // Terno de grupo seco: válido do 1º ao 5º prêmio, regras próprias
+      prize = conferirTernoGrupo(resultado.prizes, palpite.grupos!, pos_from, Math.min(pos_to, 5))
     } else {
       throw new Error(`Modalidade de grupo não suportada: ${modalidade}`)
     }
@@ -707,8 +773,22 @@ export function conferirPalpite(
   }
   
   // Buscar odd e calcular prêmio
-  const odd = buscarOdd(modalidade, pos_from, pos_to)
-  const premioUnidade = calcularPremioUnidade(odd, calculation.unitValue)
+  let odd = buscarOdd(modalidade, pos_from, pos_to)
+  
+  // Ajustar odd para Dezeninha baseado na quantidade de dezenas
+  if (modalidade === 'DEZENINHA' && palpite.numero) {
+    const qtdDezenas = palpite.numero.length / 2 // Assumindo formato de string de dezenas
+    odd = calcularMultiplicadorDezeninha(qtdDezenas)
+  }
+  
+  // Verificar se está cotada (para MILHAR e CENTENA)
+  let estaCotada = false
+  if ((modalidade === 'MILHAR' || modalidade === 'CENTENA') && palpite.numero) {
+    // Esta verificação será feita na hora da apuração, não aqui
+    // Mas deixamos preparado para receber essa informação
+  }
+  
+  const premioUnidade = calcularPremioUnidade(odd, calculation.unitValue, modalidade, palpite.numero, estaCotada)
   const totalPrize = calcularPremioPalpite(prize.hits, premioUnidade)
   
   return {

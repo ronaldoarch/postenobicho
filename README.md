@@ -1,6 +1,6 @@
-# Lot Bicho
+# Poste no Bicho
 
-Site de apostas do Jogo do Bicho - Réplica do site pontodobicho.com
+Site de apostas do Jogo do Bicho - Plataforma JB (Licenciada)
 
 ## Tecnologias
 
