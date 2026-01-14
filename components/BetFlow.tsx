@@ -11,6 +11,7 @@ import AnimalSelection from './AnimalSelection'
 import PositionAmountDivision from './PositionAmountDivision'
 import LocationSelection from './LocationSelection'
 import BetConfirmation from './BetConfirmation'
+import InstantResultModal from './InstantResultModal'
 
 const INITIAL_BET_DATA: BetData = {
   modality: null,
@@ -32,6 +33,7 @@ export default function BetFlow() {
   const [showSpecialModal, setShowSpecialModal] = useState(false)
   const [activeTab, setActiveTab] = useState<'bicho' | 'loteria'>('bicho')
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [showInstantResult, setShowInstantResult] = useState(false)
 
   const MAX_PALPITES = 10
 
@@ -134,7 +136,11 @@ export default function BetFlow() {
           const data = await res.json().catch(() => ({}))
           throw new Error(data.error || 'Erro ao criar aposta')
         }
-        alert('Aposta registrada com sucesso!')
+        if (betData.instant) {
+          setShowInstantResult(true)
+        } else {
+          alert('Aposta registrada com sucesso!')
+        }
       })
       .catch((err) => {
         const msg = err.message || 'Erro ao registrar aposta'
@@ -296,6 +302,9 @@ export default function BetFlow() {
           </button>
         </div>
       )}
+
+      {/* Modal de resultado instantâneo */}
+      <InstantResultModal open={showInstantResult} onClose={() => setShowInstantResult(false)} />
     </div>
   )
 }
