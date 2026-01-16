@@ -61,8 +61,12 @@ export default function DescargaPage() {
     try {
       setLoading(true)
       const [limitesRes, alertasRes] = await Promise.all([
-        fetch('/api/admin/descarga?action=limites'),
-        fetch('/api/admin/descarga?action=alertas'),
+        fetch('/api/admin/descarga?action=limites', {
+          credentials: 'include',
+        }),
+        fetch('/api/admin/descarga?action=alertas', {
+          credentials: 'include',
+        }),
       ])
 
       if (limitesRes.ok) {
@@ -87,6 +91,7 @@ export default function DescargaPage() {
       const response = await fetch('/api/admin/descarga', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData),
       })
 
@@ -110,6 +115,7 @@ export default function DescargaPage() {
       const response = await fetch('/api/admin/descarga', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ id }),
       })
 
@@ -133,6 +139,7 @@ export default function DescargaPage() {
       const response = await fetch('/api/admin/descarga', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           modalidade: limite.modalidade,
           premio: limite.premio,
