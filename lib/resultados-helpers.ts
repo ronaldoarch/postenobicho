@@ -158,10 +158,10 @@ export function groupResultsByDrawTime(
       // Extrair drawTime da chave composta
       const drawTime = key.split('|')[1] || key
       return {
-        drawTime,
-        rows: sortByPosition(rows),
-        dateLabel: formatDateLabel(rows[0]?.date || selectedDate),
-        locationLabel: location,
+      drawTime,
+      rows: sortByPosition(rows),
+      dateLabel: formatDateLabel(rows[0]?.date || selectedDate),
+      locationLabel: location,
       }
     })
     .sort((a, b) => extractTimeValue(a.drawTime) - extractTimeValue(b.drawTime))

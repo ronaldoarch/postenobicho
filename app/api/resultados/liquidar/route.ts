@@ -402,9 +402,9 @@ export async function POST(request: NextRequest) {
       try {
         // Verificar se já passou o horário de apuração
         const extracaoId = aposta.loteria ? Number(aposta.loteria) : null
-        const horarioAposta = aposta.horario && aposta.horario !== 'null' ? aposta.horario : null
+        const horarioApostaInicial = aposta.horario && aposta.horario !== 'null' ? aposta.horario : null
         
-        if (!jaPassouHorarioApuracao(extracaoId, aposta.dataConcurso, horarioAposta)) {
+        if (!jaPassouHorarioApuracao(extracaoId, aposta.dataConcurso, horarioApostaInicial)) {
           console.log(`⏸️  Pulando aposta ${aposta.id} - aguardando apuração`)
           continue // Pular esta aposta
         }
@@ -519,7 +519,7 @@ export async function POST(request: NextRequest) {
               if (palavrasNome.length >= 2 && palavrasLoteria.length >= 2) {
                 const palavrasComuns = palavrasNome.filter(p => 
                   palavrasLoteria.some(pl => pl.includes(p) || p.includes(pl))
-                )
+          )
                 if (palavrasComuns.length >= 2) return true
               }
               
@@ -625,7 +625,7 @@ export async function POST(request: NextRequest) {
         let horarioSelecionado: string | null = null
         let resultadosDoHorario: ResultadoItem[] = []
 
-        const horarioAposta = aposta.horario?.trim()
+        const horarioAposta = aposta.horario?.trim() || null
         if (horarioAposta && horarioAposta !== 'null') {
           // Tentar match exato primeiro
           for (const [horarioKey, resultados] of resultadosPorHorario.entries()) {
