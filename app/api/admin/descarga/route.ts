@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { parseSessionToken } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import {
   definirLimiteDescarga,
   buscarAlertasDescarga,
@@ -33,11 +34,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ alertas })
     }
 
+    if (action === 'limites') {
+      const limites = await prisma.limiteDescarga.findMany({
+        orderBy: [
+          { modalidade: 'asc' },
+          { premio: 'asc' },
+        ],
+      })
+      return NextResponse.json({ limites })
+    }
+
     // Retornar limites e alertas
-    const alertas = await buscarAlertasDescarga()
+    const [limites, alertas] = await Promise.all([
+      prisma.limiteDescarga.findMany({
+        orderBy: [
+          { modalidade: 'asc' },
+          { premio: 'asc' },
+        ],
+      }),
+      buscarAlertasDescarga(),
+    ])
+
     return NextResponse.json({
+      limites,
       alertas,
-      message: 'Use ?action=alertas para ver apenas alertas',
     })
   } catch (error) {
     console.error('Erro ao buscar descarga:', error)
