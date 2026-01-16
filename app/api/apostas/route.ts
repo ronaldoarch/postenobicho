@@ -100,6 +100,8 @@ export async function POST(request: Request) {
           modalityName?: string | null
           animalBets: number[][]
           position: string | null
+          customPosition?: boolean
+          customPositionValue?: string
           amount: number
           divisionType: 'all' | 'each'
         }
