@@ -49,7 +49,8 @@ export default function LocationSelection({
       try {
         const res = await fetch('/api/admin/extracoes')
         const data = await res.json()
-        setExtracoes((data?.extracoes || []).filter((e: Extracao) => e.active))
+        // Filtrar apenas extrações do Rio de Janeiro (RJ)
+        setExtracoes((data?.extracoes || []).filter((e: Extracao) => e.active && e.estado === 'RJ'))
       } catch (error) {
         console.error('Erro ao carregar extrações', error)
       } finally {

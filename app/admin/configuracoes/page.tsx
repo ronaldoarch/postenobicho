@@ -9,15 +9,17 @@ interface Configuracoes {
   emailSuporte: string
   whatsappSuporte: string
   logoSite: string
+  liquidacaoAutomatica: boolean
 }
 
 export default function ConfiguracoesPage() {
   const [config, setConfig] = useState<Configuracoes>({
-    nomePlataforma: 'Lot Bicho',
+    nomePlataforma: 'Poste no Bicho',
     numeroSuporte: '(00) 00000-0000',
-    emailSuporte: 'suporte@lotbicho.com',
+    emailSuporte: 'suporte@postenobicho.com',
     whatsappSuporte: '5500000000000',
     logoSite: '',
+    liquidacaoAutomatica: true,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -29,9 +31,11 @@ export default function ConfiguracoesPage() {
 
   const loadConfig = async () => {
     try {
-      const response = await fetch('/api/admin/configuracoes')
+      const response = await fetch('/api/admin/configuracoes', {
+        credentials: 'include',
+      })
       const data = await response.json()
-      setConfig(data.configuracoes || config)
+      setConfig({ ...config, ...(data.configuracoes || {}) })
     } catch (error) {
       console.error('Erro ao carregar configurações:', error)
     } finally {
@@ -75,6 +79,7 @@ export default function ConfiguracoesPage() {
       const response = await fetch('/api/admin/configuracoes', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(config),
       })
 
@@ -195,6 +200,38 @@ export default function ConfiguracoesPage() {
             required
           />
           <p className="text-xs text-gray-500 mt-1">Formato: código do país + DDD + número (sem espaços ou caracteres especiais)</p>
+        </div>
+
+        {/* Controle de Liquidação Automática */}
+        <div className="border-t border-gray-200 pt-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Liquidação Automática</h2>
+          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ativar Liquidação Automática
+              </label>
+              <p className="text-xs text-gray-500">
+                Quando ativada, o sistema liquida apostas automaticamente via cron job.
+                Quando desativada, você pode liquidar apostas manualmente.
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={config.liquidacaoAutomatica}
+                onChange={(e) => setConfig({ ...config, liquidacaoAutomatica: e.target.checked })}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue"></div>
+            </label>
+          </div>
+          {!config.liquidacaoAutomatica && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                ⚠️ <strong>Atenção:</strong> Com a liquidação automática desativada, você precisará liquidar as apostas manualmente através do painel administrativo.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-4">

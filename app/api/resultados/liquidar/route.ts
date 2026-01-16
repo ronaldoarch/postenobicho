@@ -210,6 +210,18 @@ function jaPassouHorarioApuracao(
  */
 export async function POST(request: NextRequest) {
   try {
+    // Verificar se a liquidação automática está ativa
+    const configuracoes = await prisma.configuracao.findFirst()
+    if (configuracoes && !configuracoes.liquidacaoAutomatica) {
+      return NextResponse.json({
+        message: 'Liquidação automática está desativada',
+        processadas: 0,
+        liquidadas: 0,
+        premioTotal: 0,
+        desativada: true,
+      }, { status: 200 })
+    }
+
     const body = await request.json().catch(() => ({}))
     const { loteria, dataConcurso, horario, usarMonitor = false } = body
 

@@ -91,14 +91,15 @@ model Tema {
 }
 
 model Configuracao {
-  id              Int      @id @default(autoincrement())
-  nomePlataforma  String   @default("Poste no Bicho")
-  numeroSuporte   String   @default("(00) 00000-0000")
-  emailSuporte    String   @default("suporte@postenobicho.com")
-  whatsappSuporte String   @default("5500000000000")
-  logoSite        String?  @default("")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                  Int      @id @default(autoincrement())
+  nomePlataforma      String   @default("Poste no Bicho")
+  numeroSuporte       String   @default("(00) 00000-0000")
+  emailSuporte        String   @default("suporte@postenobicho.com")
+  whatsappSuporte     String   @default("5500000000000")
+  logoSite            String?  @default("")
+  liquidacaoAutomatica Boolean @default(true) // Controla se a liquidação automática está ativa
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model LimiteDescarga {

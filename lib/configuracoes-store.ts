@@ -7,11 +7,12 @@ export async function getConfiguracoes() {
     // Criar configuração padrão se não existir
     config = await prisma.configuracao.create({
       data: {
-        nomePlataforma: 'Lot Bicho',
+        nomePlataforma: 'Poste no Bicho',
         numeroSuporte: '(00) 00000-0000',
-        emailSuporte: 'suporte@lotbicho.com',
+        emailSuporte: 'suporte@postenobicho.com',
         whatsappSuporte: '5500000000000',
         logoSite: '',
+        liquidacaoAutomatica: true,
       },
     })
   }
@@ -26,6 +27,7 @@ function normalizeConfiguracoes(updates: any) {
   if (updates.emailSuporte !== undefined) data.emailSuporte = updates.emailSuporte
   if (updates.whatsappSuporte !== undefined) data.whatsappSuporte = updates.whatsappSuporte
   if (updates.logoSite !== undefined) data.logoSite = updates.logoSite
+  if (updates.liquidacaoAutomatica !== undefined) data.liquidacaoAutomatica = updates.liquidacaoAutomatica
   return data
 }
 
