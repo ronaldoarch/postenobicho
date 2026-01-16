@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 
+// Página de gerenciamento de descarga/controle de banca
+
 interface LimiteDescarga {
   id: number
   modalidade: string
