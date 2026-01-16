@@ -139,18 +139,30 @@ export function groupResultsByDrawTime(
     const dateMatch = matchesDate(item.date, selectedDate)
     if (!locationMatch || !dateMatch) return
 
-    const key = item.drawTime?.trim() || 'Resultado'
+    // ============================================================================
+    // PROBLEMA 5: Usar chave composta (loteria + horário) para evitar misturar tabelas diferentes
+    // ============================================================================
+    // IMPORTANTE: Incluir nome da loteria na chave para evitar misturar tabelas diferentes
+    // Exemplo: LOTEP (PB) e LOTECE (CE) devem ser agrupados separadamente mesmo com mesmo horário
+    const loteriaKey = item.loteria || ''
+    const drawTimeKey = item.drawTime?.trim() || 'Resultado'
+    const key = `${loteriaKey}|${drawTimeKey}` // Chave composta
+    
     const list = groups.get(key) ?? []
     list.push(item)
     groups.set(key, list)
   })
 
   return Array.from(groups.entries())
-    .map(([drawTime, rows]) => ({
-      drawTime,
-      rows: sortByPosition(rows),
-      dateLabel: formatDateLabel(rows[0]?.date || selectedDate),
-      locationLabel: location,
-    }))
+    .map(([key, rows]) => {
+      // Extrair drawTime da chave composta
+      const drawTime = key.split('|')[1] || key
+      return {
+        drawTime,
+        rows: sortByPosition(rows),
+        dateLabel: formatDateLabel(rows[0]?.date || selectedDate),
+        locationLabel: location,
+      }
+    })
     .sort((a, b) => extractTimeValue(a.drawTime) - extractTimeValue(b.drawTime))
 }

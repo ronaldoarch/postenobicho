@@ -74,6 +74,11 @@ const EXTRACAO_UF_MAP: Record<string, string> = {
   federal: 'BR',
   'pt sp': 'SP',
   'pt sp (band)': 'SP',
+  'pt paraiba/lotep': 'PB',
+  'pt paraiba': 'PB',
+  'pt paraíba': 'PB',
+  'pt ceara': 'CE',
+  'pt ceará': 'CE',
 }
 
 const UF_ALIASES: Record<string, string> = {
@@ -144,10 +149,28 @@ function buildUrl(uf?: string) {
 function inferUfFromName(name?: string | null) {
   if (!name) return undefined
   const key = normalizeText(name)
+  
+  // ============================================================================
+  // PROBLEMA 7: Priorizar mapeamentos específicos antes de mapeamentos gerais
+  // ============================================================================
+  // IMPORTANTE: Verificar EXTRACAO_UF_MAP primeiro para evitar confusão
+  // Exemplo: LOTEP e LOTECE devem ser identificados corretamente
+  if (EXTRACAO_UF_MAP[key]) {
+    return EXTRACAO_UF_MAP[key]
+  }
+  
+  // Verificar palavras-chave específicas
+  if (key.includes('lotep') || key.includes('paraiba') || key.includes('paraíba')) {
+    return 'PB'
+  }
+  if (key.includes('lotece') || key.includes('ceara') || key.includes('ceará')) {
+    return 'CE'
+  }
+  
+  // Fallback para mapeamentos gerais
   return (
     UF_ALIASES[key] ||
     LOTERIA_UF_MAP[key] ||
-    EXTRACAO_UF_MAP[key] ||
     (key.length === 2 ? key.toUpperCase() : undefined)
   )
 }

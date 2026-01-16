@@ -253,36 +253,160 @@ export async function POST(request: NextRequest) {
         let resultadosFiltrados = resultados
 
         if (aposta.loteria) {
-          // Buscar nomes possíveis para match flexível
+          // ============================================================================
+          // PROBLEMA 2: Match flexível de nomes de extrações
+          // ============================================================================
           const extracaoId = parseInt(aposta.loteria, 10)
           const extracao = !isNaN(extracaoId)
             ? extracoes.find((e) => e.id === extracaoId)
             : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria.toLowerCase())
           const nomeExtracao = extracao?.name || aposta.loteria
-          const nomesPossiveis = extracaoNameMap[nomeExtracao] || [nomeExtracao.toLowerCase()]
           
+          // Criar lista de nomes possíveis com variações conhecidas
+          const nomeBase = nomeExtracao.toLowerCase().trim()
+          const nomesPossiveis: string[] = [
+            nomeBase,
+            nomeExtracao, // Nome original
+            nomeBase.replace(/\s+/g, ' '), // Normalizar espaços
+            nomeBase.replace(/\s+/g, '-'), // Com hífen
+            nomeBase.replace(/\s+/g, '/'), // Com barra
+          ]
+          
+          // Adicionar variações específicas baseadas em nomes REAIS da API
+          if (nomeBase.includes('pt rio')) {
+            nomesPossiveis.push(
+              'pt rio de janeiro',
+              'pt-rio',
+              'pt-rio de janeiro',
+              'mpt-rio',
+              'mpt rio',
+              'maluquinha rj',
+              'maluquinha rio de janeiro',
+              'maluquinha'
+            )
+          }
+          
+          if (nomeBase.includes('pt sp')) {
+            nomesPossiveis.push(
+              'pt-sp/bandeirantes',
+              'pt-sp bandeirantes',
+              'pt sp bandeirantes',
+              'bandeirantes',
+              'band',
+              'pt sp (band)',
+              'pt-sp'
+            )
+          }
+          
+          if (nomeBase.includes('look')) {
+            nomesPossiveis.push(
+              'look goiás',
+              'look goias',
+              'look-go',
+              'look'
+            )
+          }
+          
+          if (nomeBase.includes('lotep')) {
+            nomesPossiveis.push(
+              'pt paraiba/lotep',
+              'pt paraiba',
+              'pt paraíba',
+              'pt-pb',
+              'lotep'
+            )
+          }
+          
+          if (nomeBase.includes('lotece')) {
+            nomesPossiveis.push(
+              'lotece',
+              'pt ceara',
+              'pt ceará'
+            )
+          }
+          
+          // Adicionar mapeamento do extracaoNameMap se existir
+          if (extracaoNameMap[nomeExtracao]) {
+            nomesPossiveis.push(...extracaoNameMap[nomeExtracao])
+          }
+          
+          const antes = resultadosFiltrados.length
+          
+          // Match flexível com múltiplas estratégias
           resultadosFiltrados = resultadosFiltrados.filter((r) => {
-            const loteriaResultado = (r.loteria || '').toLowerCase()
-            return nomesPossiveis.some((nome) => loteriaResultado.includes(nome.toLowerCase()))
+            const rLoteria = (r.loteria?.toLowerCase() || '').trim()
+            
+            // Normalizar ambos os lados
+            const normalizar = (str: string) => 
+              str.toLowerCase().trim().replace(/\s+/g, ' ').replace(/\//g, '/')
+            const rLoteriaNormalizada = normalizar(rLoteria)
+            
+            const match = nomesPossiveis.some(nome => {
+              const nomeLower = normalizar(nome)
+              
+              // 1. Match exato
+              if (rLoteriaNormalizada === nomeLower) return true
+              
+              // 2. Match por inclusão (um contém o outro)
+              if (rLoteriaNormalizada.includes(nomeLower) || 
+                  nomeLower.includes(rLoteriaNormalizada)) return true
+              
+              // 3. Match por palavras-chave principais
+              const palavrasNome = nomeLower.split(/\s+|-|\//).filter(p => p.length > 2)
+              const palavrasLoteria = rLoteriaNormalizada.split(/\s+|-|\//).filter(p => p.length > 2)
+              
+              // Se pelo menos 2 palavras-chave principais coincidem
+              if (palavrasNome.length >= 2 && palavrasLoteria.length >= 2) {
+                const palavrasComuns = palavrasNome.filter(p => 
+                  palavrasLoteria.some(pl => pl.includes(p) || p.includes(pl))
+                )
+                if (palavrasComuns.length >= 2) return true
+              }
+              
+              // 4. Match por palavra-chave significativa única
+              const palavrasSignificativas = [
+                'bandeirantes', 'lotep', 'lotece', 'look', 'nacional', 'federal',
+                'maluquinha', 'maluca', 'rio', 'janeiro', 'bahia', 'paraiba',
+                'paraíba', 'ceara', 'ceará', 'goias', 'goiás', 'sp', 'são paulo'
+              ]
+              
+              const temPalavraSignificativa = palavrasSignificativas.some(palavra => {
+                return nomeLower.includes(palavra) && rLoteriaNormalizada.includes(palavra)
+              })
+              if (temPalavraSignificativa) return true
+              
+              return false
+            })
+            
+            return match
           })
           
-          // Se não encontrou resultados, tentar match parcial por palavras-chave
-          if (resultadosFiltrados.length === 0 && extracao) {
-            const palavrasChave = nomeExtracao.split(' ').filter((p) => p.length > 2)
-            resultadosFiltrados = resultados.filter((r) => {
-              const loteriaResultado = (r.loteria || '').toLowerCase()
-              return palavrasChave.some((palavra) => loteriaResultado.includes(palavra.toLowerCase()))
-            })
+          // Fallback para match mais flexível se não encontrar
+          if (resultadosFiltrados.length === 0 && antes > 0) {
+            const palavrasChave = nomeExtracao.toLowerCase()
+              .split(/\s+|-|\//)
+              .filter(p => p.length > 2)
+            
+            if (palavrasChave.length > 0) {
+              resultadosFiltrados = resultados.filter((r) => {
+                const rLoteria = (r.loteria?.toLowerCase() || '').trim()
+                return palavrasChave.some(palavra => rLoteria.includes(palavra))
+              })
+            }
+            
+            // Se ainda não encontrou, tentar sem filtro de loteria (usar todos)
+            if (resultadosFiltrados.length === 0) {
+              resultadosFiltrados = resultados // Usar todos os resultados
+            }
           }
           
           console.log(`- Loteria ID ${extracaoId} → Nome: "${nomeExtracao}" (ativa: ${extracao?.active ?? true})`)
-          console.log(`- Nomes possíveis para match: ${nomesPossiveis.join(', ')}`)
-          console.log(`- Após filtro de loteria "${nomeExtracao}": ${resultadosFiltrados.length} resultados (antes: ${resultados.length})`)
+          console.log(`- Nomes possíveis para match: ${nomesPossiveis.slice(0, 5).join(', ')}...`)
+          console.log(`- Após filtro de loteria "${nomeExtracao}": ${resultadosFiltrados.length} resultados (antes: ${antes})`)
         }
 
-        if (aposta.horario) {
-          resultadosFiltrados = resultadosFiltrados.filter((r) => r.horario === aposta.horario)
-        }
+        // NOTA: Não filtrar por horário aqui, pois vamos agrupar por horário depois
+        // O filtro de horário será feito no agrupamento para evitar misturar resultados
 
         if (aposta.dataConcurso) {
           // Normalizar formato de data da aposta (ISO: 2026-01-14)
@@ -316,9 +440,105 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Converter resultados para formato do motor de regras
-        // Ordenar por posição (1º, 2º, 3º, etc.)
-        const resultadosOrdenados = resultadosFiltrados
+        // ============================================================================
+        // PROBLEMA 1: Agrupar por horário ANTES de selecionar prêmios
+        // ============================================================================
+        // Evita misturar prêmios de diferentes horários (ex: 1º de um horário + 2º de outro)
+        const resultadosPorHorario = new Map<string, ResultadoItem[]>()
+
+        resultadosFiltrados.forEach((r) => {
+          if (r.position && r.milhar) {
+            // IMPORTANTE: Incluir nome da loteria na chave para evitar misturar tabelas diferentes
+            // Exemplo: LOTEP (PB) e LOTECE (CE) devem ser agrupados separadamente mesmo com mesmo horário
+            const loteriaKey = r.loteria || ''
+            const horarioKey = r.horario?.trim() || r.drawTime?.trim() || 'sem-horario'
+            const key = `${loteriaKey}|${horarioKey}` // Chave composta
+            
+            if (!resultadosPorHorario.has(key)) {
+              resultadosPorHorario.set(key, [])
+            }
+            resultadosPorHorario.get(key)!.push(r)
+          }
+        })
+
+        // Selecionar o horário correto para a aposta
+        let horarioSelecionado: string | null = null
+        let resultadosDoHorario: ResultadoItem[] = []
+
+        const horarioAposta = aposta.horario?.trim()
+        if (horarioAposta && horarioAposta !== 'null') {
+          // Tentar match exato primeiro
+          for (const [horarioKey, resultados] of resultadosPorHorario.entries()) {
+            const horarioKeyLower = horarioKey.toLowerCase()
+            const horarioApostaLower = horarioAposta.toLowerCase()
+            
+            // Match exato
+            if (horarioKeyLower.includes(horarioApostaLower) || 
+                horarioApostaLower.includes(horarioKeyLower)) {
+              horarioSelecionado = horarioKey
+              resultadosDoHorario = resultados
+              break
+            }
+            
+            // Match por início (ex: "20:15" matcha "20:15:00")
+            const horarioKeyOnly = horarioKey.split('|')[1] || horarioKey
+            if (horarioKeyOnly.startsWith(horarioApostaLower) || 
+                horarioApostaLower.startsWith(horarioKeyOnly)) {
+              horarioSelecionado = horarioKey
+              resultadosDoHorario = resultados
+              break
+            }
+          }
+        }
+
+        // Se não encontrou match exato, buscar horário mais próximo
+        if (resultadosDoHorario.length === 0) {
+          const extracaoId = parseInt(aposta.loteria, 10)
+          const extracao = !isNaN(extracaoId)
+            ? extracoes.find((e) => e.id === extracaoId)
+            : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria?.toLowerCase())
+          
+          if (extracao) {
+            // Coletar todos os horários possíveis da extração
+            const horariosPossiveis: string[] = []
+            if (extracao.time) horariosPossiveis.push(extracao.time)
+            if (extracao.closeTime) horariosPossiveis.push(extracao.closeTime)
+            
+            // Tentar match com cada horário possível
+            for (const horarioPossivel of horariosPossiveis) {
+              for (const [horarioKey, resultados] of resultadosPorHorario.entries()) {
+                const horarioKeyOnly = horarioKey.split('|')[1] || horarioKey
+                if (horarioKeyOnly.includes(horarioPossivel) || 
+                    horarioPossivel.includes(horarioKeyOnly)) {
+                  horarioSelecionado = horarioKey
+                  resultadosDoHorario = resultados
+                  break
+                }
+              }
+              if (resultadosDoHorario.length > 0) break
+            }
+          }
+          
+          // Fallback: usar o horário com mais resultados (geralmente é o mais recente)
+          if (resultadosDoHorario.length === 0) {
+            let maxResultados = 0
+            for (const [horarioKey, resultados] of resultadosPorHorario.entries()) {
+              if (resultados.length > maxResultados) {
+                maxResultados = resultados.length
+                horarioSelecionado = horarioKey
+                resultadosDoHorario = resultados
+              }
+            }
+          }
+        }
+
+        if (resultadosDoHorario.length === 0) {
+          console.log(`Nenhum resultado válido encontrado para aposta ${aposta.id} após agrupamento por horário`)
+          continue
+        }
+
+        // SÓ DEPOIS ordenar e pegar prêmios do horário selecionado
+        const resultadosOrdenados = resultadosDoHorario
           .filter((r) => r.position && r.milhar)
           .sort((a, b) => {
             // Extrair número da posição (1º, 2º, etc.)
