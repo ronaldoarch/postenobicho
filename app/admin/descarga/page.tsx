@@ -158,6 +158,214 @@ export default function DescargaPage() {
     }
   }
 
+  const exportarPDF = () => {
+    const dataAtual = new Date().toLocaleString('pt-BR')
+    
+    // Criar conteúdo HTML para o PDF
+    let htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <title>Relatório de Descarga - ${dataAtual}</title>
+        <style>
+          @media print {
+            @page {
+              margin: 1cm;
+            }
+          }
+          body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: #333;
+          }
+          h1 {
+            color: #1e40af;
+            border-bottom: 3px solid #1e40af;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+          }
+          h2 {
+            color: #1e40af;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 18px;
+          }
+          .info {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 12px;
+          }
+          th {
+            background: #1e40af;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-weight: bold;
+          }
+          td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          tr:nth-child(even) {
+            background: #f9fafb;
+          }
+          .status-ativo {
+            color: #059669;
+            font-weight: bold;
+          }
+          .status-inativo {
+            color: #dc2626;
+            font-weight: bold;
+          }
+          .alerta {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 10px;
+            margin-bottom: 10px;
+          }
+          .resumo {
+            background: #eff6ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+          }
+          .valor {
+            font-weight: bold;
+            color: #1e40af;
+          }
+          .excedente {
+            color: #dc2626;
+            font-weight: bold;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Relatório de Descarga / Controle de Banca</h1>
+        
+        <div class="info">
+          <strong>Data de Geração:</strong> ${dataAtual}<br>
+          <strong>Total de Limites Cadastrados:</strong> ${limites.length}<br>
+          <strong>Total de Alertas Ativos:</strong> ${alertas.filter(a => !a.resolvido).length}
+        </div>
+
+        <h2>Limites Cadastrados</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Modalidade</th>
+              <th>Prêmio</th>
+              <th>Limite (R$)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+    `
+
+    if (limites.length === 0) {
+      htmlContent += `
+            <tr>
+              <td colspan="4" style="text-align: center; padding: 20px; color: #6b7280;">
+                Nenhum limite cadastrado
+              </td>
+            </tr>
+      `
+    } else {
+      limites.forEach((limite) => {
+        htmlContent += `
+            <tr>
+              <td>${limite.modalidade}</td>
+              <td>${limite.premio}º Prêmio</td>
+              <td class="valor">R$ ${limite.limite.toFixed(2)}</td>
+              <td class="${limite.ativo ? 'status-ativo' : 'status-inativo'}">
+                ${limite.ativo ? 'Ativo' : 'Inativo'}
+              </td>
+            </tr>
+        `
+      })
+    }
+
+    htmlContent += `
+          </tbody>
+        </table>
+    `
+
+    // Adicionar alertas se houver
+    const alertasAtivos = alertas.filter((a) => !a.resolvido)
+    if (alertasAtivos.length > 0) {
+      htmlContent += `
+        <h2>Alertas de Descarga Ativos</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Modalidade</th>
+              <th>Prêmio</th>
+              <th>Valor Atual (R$)</th>
+              <th>Limite (R$)</th>
+              <th>Excedente (R$)</th>
+              <th>Data do Alerta</th>
+            </tr>
+          </thead>
+          <tbody>
+      `
+
+      alertasAtivos.forEach((alerta) => {
+        const dataAlerta = new Date(alerta.createdAt).toLocaleString('pt-BR')
+        htmlContent += `
+            <tr>
+              <td>${alerta.modalidade}</td>
+              <td>${alerta.premio}º Prêmio</td>
+              <td class="valor">R$ ${alerta.valorAtual.toFixed(2)}</td>
+              <td>R$ ${alerta.limite.toFixed(2)}</td>
+              <td class="excedente">R$ ${alerta.excedente.toFixed(2)}</td>
+              <td>${dataAlerta}</td>
+            </tr>
+        `
+      })
+
+      htmlContent += `
+          </tbody>
+        </table>
+      `
+    }
+
+    // Resumo
+    const totalLimitesAtivos = limites.filter((l) => l.ativo).length
+    const totalValorLimites = limites.reduce((sum, l) => sum + l.limite, 0)
+    const totalExcedente = alertasAtivos.reduce((sum, a) => sum + a.excedente, 0)
+
+    htmlContent += `
+        <div class="resumo">
+          <h2>Resumo</h2>
+          <p><strong>Limites Ativos:</strong> ${totalLimitesAtivos}</p>
+          <p><strong>Total em Limites:</strong> R$ ${totalValorLimites.toFixed(2)}</p>
+          <p><strong>Total em Excedentes:</strong> <span class="excedente">R$ ${totalExcedente.toFixed(2)}</span></p>
+        </div>
+      </body>
+      </html>
+    `
+
+    // Abrir nova janela e imprimir
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(htmlContent)
+      printWindow.document.close()
+      printWindow.focus()
+      
+      // Aguardar um pouco antes de imprimir para garantir que o conteúdo foi carregado
+      setTimeout(() => {
+        printWindow.print()
+      }, 250)
+    }
+  }
+
   if (loading) {
     return <div className="text-center py-8">Carregando...</div>
   }
@@ -166,12 +374,21 @@ export default function DescargaPage() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Controle de Descarga</h1>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          {showForm ? 'Cancelar' : '+ Novo Limite'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={exportarPDF}
+            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+          >
+            <span className="text-xl">📄</span>
+            Exportar PDF
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-blue text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            {showForm ? 'Cancelar' : '+ Novo Limite'}
+          </button>
+        </div>
       </div>
 
       {/* Formulário de Novo Limite */}
