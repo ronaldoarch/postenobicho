@@ -3,10 +3,10 @@ import { ResultadosResponse, ResultadoItem } from '@/types/resultados'
 import { toIsoDate } from '@/lib/resultados-helpers'
 import { extracoes, type Extracao } from '@/data/extracoes'
 import { getHorarioRealApuracao } from '@/data/horarios-reais-apuracao'
+import { buscarResultadosPorNome, buscarResultadosBichoCerto } from '@/lib/bichocerto-parser'
 
-const RAW_SOURCE =
-  process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'
-const SOURCE_ROOT = RAW_SOURCE.replace(/\/api\/resultados$/, '')
+// Flag para usar parser direto (desativa API antiga)
+const USAR_BICHOCERTO_DIRETO = process.env.USAR_BICHOCERTO_DIRETO !== 'false'
 
 const UF_NAME_MAP: Record<string, string> = {
   RJ: 'Rio de Janeiro',
@@ -143,10 +143,7 @@ function resolveUF(location?: string | null) {
   return UF_ALIASES[key] ?? (key.length === 2 ? key.toUpperCase() : undefined)
 }
 
-function buildUrl(uf?: string) {
-  if (uf) return `${SOURCE_ROOT}/api/resultados/estado/${uf}`
-  return `${SOURCE_ROOT}/api/resultados`
-}
+// Função buildUrl removida - não mais necessária com parser direto
 
 /**
  * Normaliza o horário do resultado para o horário correto de fechamento da extração
@@ -334,79 +331,107 @@ function matchesDateFilter(value: string | undefined, filter: string) {
   )
 }
 
+/**
+ * GET /api/resultados
+ * 
+ * Busca resultados diretamente do bichocerto.com usando parser HTML
+ * 
+ * Query params:
+ * - date: Data no formato YYYY-MM-DD (opcional, padrão: hoje)
+ * - location: Filtro por localização (opcional)
+ */
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const dateFilter = searchParams.get('date')
   const locationFilter = searchParams.get('location')
   const uf = resolveUF(locationFilter)
 
-  const fetchWithTimeout = async (url: string, timeoutMs = 15000) => {
-    const controller = new AbortController()
-    const id = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      return await fetch(url, { cache: 'no-store', signal: controller.signal })
-    } finally {
-      clearTimeout(id)
-    }
-  }
+  // Determinar data a buscar (padrão: hoje)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const dataBusca = dateFilter ? toIsoDate(dateFilter) : hoje.toISOString().split('T')[0]
 
   try {
-    // Nova fonte principal: resultados organizados
-    const res = await fetchWithTimeout(`${SOURCE_ROOT}/api/resultados/organizados`)
-    if (!res.ok) throw new Error(`Upstream status ${res.status}`)
+    // Se não usar parser direto, tentar API antiga como fallback
+    if (!USAR_BICHOCERTO_DIRETO) {
+      console.log('⚠️ USAR_BICHOCERTO_DIRETO=false, usando API antiga')
+      // TODO: Implementar fallback para API antiga se necessário
+      throw new Error('API antiga desativada - use USAR_BICHOCERTO_DIRETO=true')
+    }
 
-    const data = await res.json()
-    const organizados = data?.organizados || {}
+    console.log(`🔍 Buscando resultados do bichocerto.com para data: ${dataBusca}`)
 
-    let results: ResultadoItem[] = []
-    const extracaoHorarios: Record<string, string[]> = {}
+    // Buscar resultados de todas as loterias ativas
+    const loteriasUnicas = Array.from(new Set(extracoes.filter(e => e.active).map(e => e.name)))
     
-    Object.entries(organizados).forEach(([tabela, horarios]) => {
-      if (!extracaoHorarios[tabela]) {
-        extracaoHorarios[tabela] = []
-      }
-      Object.entries(horarios as Record<string, any[]>).forEach(([horario, lista]) => {
-        if (!extracaoHorarios[tabela].includes(horario)) {
-          extracaoHorarios[tabela].push(horario)
+    const resultadosPorLoteria: Record<string, any[]> = {}
+    const extracaoHorarios: Record<string, string[]> = {}
+
+    // Buscar resultados de cada loteria em paralelo
+    const promessas = loteriasUnicas.map(async (nomeLoteria) => {
+      try {
+        const resultadosBichoCerto = await buscarResultadosPorNome(nomeLoteria, dataBusca)
+        
+        if (resultadosBichoCerto.length > 0) {
+          resultadosPorLoteria[nomeLoteria] = resultadosBichoCerto
+          
+          // Extrair horários encontrados
+          if (!extracaoHorarios[nomeLoteria]) {
+            extracaoHorarios[nomeLoteria] = []
+          }
+          resultadosBichoCerto.forEach(r => {
+            if (!extracaoHorarios[nomeLoteria].includes(r.horario)) {
+              extracaoHorarios[nomeLoteria].push(r.horario)
+            }
+          })
         }
-        const arr = (lista || []).map((item: any, idx: number) => {
-          const estado =
-            item.estado || inferUfFromName(item.estado) || inferUfFromName(tabela) || inferUfFromName(item.local)
-          const locationResolved = UF_NAME_MAP[estado || ''] || tabela || item.local || ''
-          const dateValue = item.data_extracao || item.dataExtracao || item.data || item.date || ''
+      } catch (error) {
+        console.error(`❌ Erro ao buscar resultados para ${nomeLoteria}:`, error)
+      }
+    })
+
+    await Promise.all(promessas)
+
+    // Converter resultados do parser para formato ResultadoItem
+    let results: ResultadoItem[] = []
+
+    Object.entries(resultadosPorLoteria).forEach(([nomeLoteria, resultadosBichoCerto]) => {
+      resultadosBichoCerto.forEach((resultadoBichoCerto) => {
+        resultadoBichoCerto.premios.forEach((premio) => {
+          const estado = inferUfFromName(nomeLoteria)
+          const locationResolved = UF_NAME_MAP[estado || ''] || nomeLoteria
           
           // Normalizar horário do resultado
-          const horarioOriginal = horario
-          const horarioNormalizado = normalizarHorarioResultado(tabela, horario)
+          const horarioOriginal = resultadoBichoCerto.horario
+          const horarioNormalizado = normalizarHorarioResultado(nomeLoteria, horarioOriginal)
           
-          return {
-            position: item.colocacao || `${item.posicao || idx + 1}°`,
-            posicao:
-              item.posicao || (item.colocacao && parseInt(String(item.colocacao).replace(/\D/g, ''), 10)) || idx + 1,
-            milhar: item.numero || item.milhar || '',
-            grupo: item.grupo || '',
-            animal: item.animal || '',
-            drawTime: horarioNormalizado,  // Horário normalizado
-            horario: horarioNormalizado,   // Horário normalizado
-            horarioOriginal: horarioOriginal !== horarioNormalizado ? horarioOriginal : undefined, // Manter original se diferente
-            loteria: tabela,
+          const resultadoItem: ResultadoItem = {
+            position: premio.posicao,
+            posicao: parseInt(premio.posicao.replace(/\D/g, ''), 10),
+            milhar: premio.numero,
+            grupo: premio.grupo,
+            animal: premio.animal,
+            drawTime: horarioNormalizado,
+            horario: horarioNormalizado,
+            horarioOriginal: horarioOriginal !== horarioNormalizado ? horarioOriginal : undefined,
+            loteria: nomeLoteria,
             location: locationResolved,
-            date: dateValue,
-            dataExtracao: dateValue,
+            date: dataBusca,
+            dataExtracao: dataBusca,
             estado,
-            timestamp: item.timestamp || undefined,
-            fonte: item.fonte || item.origem || undefined,
-            urlOrigem: item.url_origem || item.urlOrigem || item.link || undefined,
-          } as ResultadoItem
+            fonte: 'bichocerto.com',
+          }
+          
+          results.push(resultadoItem)
         })
-        results = results.concat(arr)
       })
     })
 
-    // Filtro por data (usa dataExtracao/data_extracao)
+    // Filtro por data
     if (dateFilter) {
       results = results.filter((r) => matchesDateFilter(r.dataExtracao || r.date, dateFilter))
     }
+    
     // Filtro por UF ou nome
     if (uf) {
       results = results.filter((r) => (r.estado || '').toUpperCase() === uf)
@@ -415,19 +440,20 @@ export async function GET(req: NextRequest) {
       results = results.filter((r) => normalizeText(r.location || '').includes(lf))
     }
 
-    // Logs de debug: mostrar quantos horários cada extração tem
+    // Logs de debug
     Object.entries(extracaoHorarios).forEach(([extracao, horarios]) => {
       console.log(`📊 Extração "${extracao}": ${horarios.length} horário(s) - ${horarios.join(', ')}`)
     })
     console.log(`📈 Total processado: ${Object.keys(extracaoHorarios).length} extrações, ${Object.values(extracaoHorarios).reduce((sum, h) => sum + h.length, 0)} horários, ${results.length} resultados`)
 
-    // Ordenar e limitar em 7 posições por sorteio
+    // Agrupar e ordenar por loteria|horário|data, limitando a 7 posições por grupo
     const grouped: Record<string, ResultadoItem[]> = {}
     results.forEach((r) => {
       const key = `${r.loteria || ''}|${r.drawTime || ''}|${r.date || ''}`
       grouped[key] = grouped[key] || []
       grouped[key].push(r)
     })
+    
     results = Object.values(grouped)
       .map((arr) => orderByPosition(arr).slice(0, 7))
       .flat()
@@ -436,17 +462,17 @@ export async function GET(req: NextRequest) {
 
     const payload: ResultadosResponse = {
       results,
-      updatedAt: data?.ultima_verificacao || data?.updatedAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     }
 
     return NextResponse.json(payload, { status: 200, headers: { 'Cache-Control': 'no-cache' } })
   } catch (error) {
-    console.error('Erro ao buscar resultados externos:', error)
+    console.error('❌ Erro ao buscar resultados do bichocerto.com:', error)
     return NextResponse.json(
       {
         results: [],
         updatedAt: new Date().toISOString(),
-        error: 'Falha ao buscar resultados externos',
+        error: 'Falha ao buscar resultados do bichocerto.com',
       } satisfies ResultadosResponse & { error: string },
       { status: 502 }
     )

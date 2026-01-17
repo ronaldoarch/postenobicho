@@ -13,6 +13,7 @@ import { ResultadoItem } from '@/types/resultados'
 import { verificarMilharCotada, verificarCentenaCotada, extrairCentena } from '@/lib/cotacao'
 import { extracoes, type Extracao } from '@/data/extracoes'
 import { getHorarioRealApuracao, temSorteioNoDia } from '@/data/horarios-reais-apuracao'
+import { buscarResultadosPorNome } from '@/lib/bichocerto-parser'
 
 /**
  * GET /api/resultados/liquidar
@@ -284,48 +285,79 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Buscar resultados oficiais
-    // Usar API interna primeiro (mais rápido), com fallback para API externa
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 
-                   (request.headers.get('host') ? `https://${request.headers.get('host')}` : 'http://localhost:3000')
-    
+    // Buscar resultados oficiais usando parser do bichocerto.com
     let resultados: ResultadoItem[] = []
-    let resultadosData: any = null
     
     try {
-      // Tentar API interna primeiro (timeout de 30s)
-      const resultadosResponse = await fetch(`${baseUrl}/api/resultados`, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(30000),
+      // Agrupar apostas por loteria e data para buscar resultados de forma eficiente
+      const apostasPorLoteriaData = new Map<string, { loteria: string, data: string }>()
+      
+      apostasPendentes.forEach(aposta => {
+        if (aposta.loteria && aposta.dataConcurso) {
+          const dataStr = aposta.dataConcurso.toISOString().split('T')[0]
+          const key = `${aposta.loteria}|${dataStr}`
+          if (!apostasPorLoteriaData.has(key)) {
+            apostasPorLoteriaData.set(key, {
+              loteria: aposta.loteria,
+              data: dataStr
+            })
+          }
+        }
       })
       
-      if (resultadosResponse.ok) {
-        resultadosData = await resultadosResponse.json()
-        resultados = resultadosData.results || resultadosData.resultados || []
-      }
-    } catch (error) {
-      console.warn('⚠️ Erro ao buscar resultados da API interna, tentando API externa:', error)
-    }
-    
-    // Fallback para API externa se necessário
-    if (resultados.length === 0) {
-      try {
-    const resultadosResponse = await fetch(
-      `${process.env.BICHO_CERTO_API ?? 'https://okgkgswwkk8ows0csow0c4gg.agenciamidas.com/api/resultados'}`,
-          { 
-            cache: 'no-store',
-            signal: AbortSignal.timeout(30000),
+      // Buscar resultados de cada loteria/data única
+      const promessasResultados = Array.from(apostasPorLoteriaData.values()).map(async ({ loteria, data }) => {
+        try {
+          // Buscar extração para obter nome da loteria
+          const extracaoId = parseInt(loteria, 10)
+          const extracao = !isNaN(extracaoId)
+            ? extracoes.find((e) => e.id === extracaoId)
+            : extracoes.find((e) => e.name.toLowerCase() === loteria.toLowerCase())
+          
+          if (!extracao) {
+            console.warn(`⚠️ Extração não encontrada para loteria: ${loteria}`)
+            return []
           }
-    )
-
-        if (resultadosResponse.ok) {
-          resultadosData = await resultadosResponse.json()
-          resultados = resultadosData.results || resultadosData.resultados || []
+          
+          // Buscar resultados do bichocerto.com
+          const resultadosBichoCerto = await buscarResultadosPorNome(extracao.name, data)
+          
+          // Converter para formato ResultadoItem
+          const resultadosConvertidos: ResultadoItem[] = []
+          
+          resultadosBichoCerto.forEach(resultadoBichoCerto => {
+            resultadoBichoCerto.premios.forEach(premio => {
+              resultadosConvertidos.push({
+                position: premio.posicao,
+                posicao: parseInt(premio.posicao.replace(/\D/g, ''), 10),
+                milhar: premio.numero,
+                grupo: premio.grupo,
+                animal: premio.animal,
+                drawTime: resultadoBichoCerto.horario,
+                horario: resultadoBichoCerto.horario,
+                loteria: extracao.name,
+                date: data,
+                dataExtracao: data,
+                estado: extracao.estado,
+                fonte: 'bichocerto.com',
+              })
+            })
+          })
+          
+          return resultadosConvertidos
+        } catch (error) {
+          console.error(`❌ Erro ao buscar resultados para ${loteria} em ${data}:`, error)
+          return []
         }
-      } catch (error) {
-        console.error('❌ Erro ao buscar resultados da API externa:', error)
+      })
+      
+      const resultadosArrays = await Promise.all(promessasResultados)
+      resultados = resultadosArrays.flat()
+      
+      console.log(`📊 Total de resultados encontrados: ${resultados.length}`)
+    } catch (error) {
+      console.error('❌ Erro ao buscar resultados do bichocerto.com:', error)
       throw new Error('Erro ao buscar resultados oficiais')
-      }
     }
 
     if (resultados.length === 0) {
