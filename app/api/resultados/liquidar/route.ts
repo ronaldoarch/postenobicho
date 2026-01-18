@@ -7,6 +7,7 @@ import {
   type InstantResult,
   calcularPremioUnidade,
   buscarOdd,
+  grupoParaDezenas,
 } from '@/lib/bet-rules-engine'
 import { ANIMALS } from '@/data/animals'
 import { ResultadoItem } from '@/types/resultados'
@@ -375,6 +376,7 @@ export async function POST(request: NextRequest) {
       'Dupla de Grupo': 'DUPLA_GRUPO',
       'Terno de Grupo': 'TERNO_GRUPO',
       'Quadra de Grupo': 'QUADRA_GRUPO',
+      'Quina de Grupo': 'QUINA_GRUPO',
       Dezena: 'DEZENA',
       Centena: 'CENTENA',
       Milhar: 'MILHAR',
@@ -385,7 +387,9 @@ export async function POST(request: NextRequest) {
       'Passe vai': 'PASSE',
       'Passe vai e vem': 'PASSE_VAI_E_VEM',
       'Quadra de Dezena': 'QUADRA_DEZENA',
+      'Duque de Dezena': 'DUQUE_DEZENA',
       'Duque de Dezena (EMD)': 'DUQUE_DEZENA_EMD',
+      'Terno de Dezena': 'TERNO_DEZENA',
       'Terno de Dezena (EMD)': 'TERNO_DEZENA_EMD',
       'Dezeninha': 'DEZENINHA',
       'Terno de Grupo Seco': 'TERNO_GRUPO_SECO',
@@ -820,22 +824,114 @@ export async function POST(request: NextRequest) {
             palpiteData = { grupos: gruposApostados }
           } else if (
             modalityType === 'QUADRA_DEZENA' ||
+            modalityType === 'DUQUE_DEZENA' ||
             modalityType === 'DUQUE_DEZENA_EMD' ||
+            modalityType === 'TERNO_DEZENA' ||
             modalityType === 'TERNO_DEZENA_EMD'
           ) {
-            // Para modalidades de dezena EMD, precisamos do número apostado
+            // Para modalidades de dezena, precisamos do número apostado
             if (betData.numeroApostado) {
               palpiteData = { numero: betData.numeroApostado }
             } else {
-              // Fallback: tentar converter animais em dezenas (se disponível)
-              // Por enquanto, pulamos se não tiver número
+              // Fallback: tentar converter grupos em dezenas
+              // Cada grupo representa 4 dezenas, então pegamos a primeira dezena do grupo
+              if (gruposApostados.length > 0) {
+                const dezenas: string[] = []
+                gruposApostados.forEach(grupo => {
+                  // Converter grupo para dezenas (grupo 1 = dezenas 01-04, grupo 2 = 05-08, etc.)
+                  const dezenasDoGrupo = grupoParaDezenas(grupo)
+                  dezenasDoGrupo.forEach(d => {
+                    const dezenaStr = d.toString().padStart(2, '0')
+                    if (!dezenas.includes(dezenaStr)) {
+                      dezenas.push(dezenaStr)
+                    }
+                  })
+                })
+                if (dezenas.length > 0) {
+                  palpiteData = { numero: dezenas.join(',') }
+                } else {
+                  console.log(`Modalidade ${modalityType} requer número apostado, mas não encontrado na aposta ${aposta.id}`)
+                  continue
+                }
+              } else {
+                console.log(`Modalidade ${modalityType} requer número apostado, mas não encontrado na aposta ${aposta.id}`)
+                continue
+              }
+            }
+          } else if (
+            modalityType === 'DEZENA' ||
+            modalityType === 'CENTENA' ||
+            modalityType === 'MILHAR' ||
+            modalityType === 'DEZENA_INVERTIDA' ||
+            modalityType === 'CENTENA_INVERTIDA' ||
+            modalityType === 'MILHAR_INVERTIDA' ||
+            modalityType === 'MILHAR_CENTENA' ||
+            modalityType === 'DEZENINHA'
+          ) {
+            // Para modalidades numéricas, tentar usar número apostado ou converter grupos
+            if (betData.numeroApostado) {
+              palpiteData = { numero: betData.numeroApostado }
+            } else if (gruposApostados.length > 0) {
+              // Converter grupos em números
+              // Para dezena: usar primeira dezena do grupo
+              // Para centena/milhar: usar grupo como base (ex: grupo 1 = 0100 ou 0001)
+              if (modalityType === 'DEZENA' || modalityType === 'DEZENA_INVERTIDA') {
+                const dezenas: string[] = []
+                gruposApostados.forEach(grupo => {
+                  const dezenasDoGrupo = grupoParaDezenas(grupo)
+                  dezenasDoGrupo.forEach(d => {
+                    const dezenaStr = d.toString().padStart(2, '0')
+                    if (!dezenas.includes(dezenaStr)) {
+                      dezenas.push(dezenaStr)
+                    }
+                  })
+                })
+                if (dezenas.length > 0) {
+                  palpiteData = { numero: dezenas[0] } // Usar primeira dezena
+                } else {
+                  console.log(`Modalidade ${modalityType} requer número apostado, mas não encontrado na aposta ${aposta.id}`)
+                  continue
+                }
+              } else {
+                // Para centena/milhar, usar grupo como base
+                // Exemplo: grupo 1 = dezena 01, então centena = 001, milhar = 0001
+                const grupo = gruposApostados[0]
+                const dezenasDoGrupo = grupoParaDezenas(grupo)
+                const primeiraDezena = dezenasDoGrupo[0].toString().padStart(2, '0')
+                
+                if (modalityType === 'CENTENA' || modalityType === 'CENTENA_INVERTIDA') {
+                  palpiteData = { numero: `0${primeiraDezena}` } // Centena: 001, 002, etc.
+                } else if (modalityType === 'MILHAR' || modalityType === 'MILHAR_INVERTIDA' || modalityType === 'MILHAR_CENTENA') {
+                  palpiteData = { numero: `00${primeiraDezena}` } // Milhar: 0001, 0002, etc.
+                } else if (modalityType === 'DEZENINHA') {
+                  // Dezeninha: múltiplas dezenas
+                  const todasDezenas: string[] = []
+                  gruposApostados.forEach(grupo => {
+                    const dezenasDoGrupo = grupoParaDezenas(grupo)
+                    dezenasDoGrupo.forEach(d => {
+                      const dezenaStr = d.toString().padStart(2, '0')
+                      if (!todasDezenas.includes(dezenaStr)) {
+                        todasDezenas.push(dezenaStr)
+                      }
+                    })
+                  })
+                  if (todasDezenas.length >= 3) {
+                    palpiteData = { numero: todasDezenas.join(',') }
+                  } else {
+                    console.log(`Dezeninha requer pelo menos 3 dezenas, mas encontrado ${todasDezenas.length} na aposta ${aposta.id}`)
+                    continue
+                  }
+                } else {
+                  console.log(`Modalidade ${modalityType} requer número apostado, mas não encontrado na aposta ${aposta.id}`)
+                  continue
+                }
+              }
+            } else {
               console.log(`Modalidade ${modalityType} requer número apostado, mas não encontrado na aposta ${aposta.id}`)
               continue
             }
           } else {
-            // Para outras modalidades numéricas, precisaríamos do número apostado
-            // Por enquanto, pulamos modalidades numéricas não implementadas
-            console.log(`Modalidade numérica ${modalityType} ainda não suportada na liquidação`)
+            console.log(`Modalidade ${modalityType} ainda não suportada na liquidação`)
             continue
           }
 
