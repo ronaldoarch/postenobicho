@@ -1,15 +1,25 @@
-# Guia de Deploy - Lot Bicho
+# Guia de Deploy - Poste no Bicho
 
-## Configuração do Banco de Dados PostgreSQL
+## Configuração do Banco de Dados MySQL
 
-O projeto está configurado para usar PostgreSQL via Prisma ORM.
+O projeto está configurado para usar MySQL via Prisma ORM.
 
 ### Variáveis de Ambiente
 
 Crie um arquivo `.env` na raiz do projeto com a seguinte variável:
 
 ```env
-DATABASE_URL="postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3WzS80RetfPNz7z2Zle@uk40so004k8gc488ws0sokg0:5432/postgres"
+DATABASE_URL="mysql://usuario:senha@host:3306/nome_do_banco"
+```
+
+**Exemplo:**
+```env
+DATABASE_URL="mysql://root:senha123@localhost:3306/postenobicho"
+```
+
+**Para produção (com SSL):**
+```env
+DATABASE_URL="mysql://usuario:senha@host:3306/nome_do_banco?sslaccept=strict"
 ```
 
 ### Comandos do Prisma
@@ -38,9 +48,14 @@ DATABASE_URL="postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3
 
 #### Opção 1: Deploy com Dockerfile Customizado (Recomendado)
 
-1. **Configure a variável de ambiente `DATABASE_URL`** no painel do Colify com a URL do PostgreSQL:
+1. **Configure a variável de ambiente `DATABASE_URL`** no painel do Coolify/Colify com a URL do MySQL:
    ```
-   postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3WzS80RetfPNz7z2Zle@uk40so004k8gc488ws0sokg0:5432/postgres
+   mysql://usuario:senha@host:3306/nome_do_banco
+   ```
+   
+   **Exemplo:**
+   ```
+   mysql://root:senha123@db.example.com:3306/postenobicho
    ```
 
 2. **Configure o Volume Persistente** (IMPORTANTE para manter uploads):
@@ -81,7 +96,7 @@ Se quiser testar localmente antes:
 
 1. **Crie o arquivo `.env`** na raiz com:
    ```env
-   DATABASE_URL="postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3WzS80RetfPNz7z2Zle@uk40so004k8gc488ws0sokg0:5432/postgres"
+   DATABASE_URL="mysql://usuario:senha@host:3306/nome_do_banco"
    ```
 
 2. **Instale as dependências:**

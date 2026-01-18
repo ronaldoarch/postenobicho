@@ -39,7 +39,12 @@ O Colify não consegue acessar repositórios privados do GitHub sem autenticaç�
 No Colify, adicione:
 
 - **Nome**: `DATABASE_URL`
-- **Valor**: `postgres://postgres:SW1Ho4OVgCGpgpgZ6WVMd3fUU9E86f6H4O0CnuMUWU25b3WzS80RetfPNz7z2Zle@uk40so004k8gc488ws0sokg0:5432/postgres`
+- **Valor**: `mysql://usuario:senha@host:3306/nome_do_banco`
+  
+  **Exemplo:**
+  ```
+  mysql://root:senha123@db.example.com:3306/postenobicho
+  ```
 
 ### Passo 4: Após o Primeiro Deploy
 

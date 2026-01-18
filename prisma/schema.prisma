@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -75,7 +75,7 @@ model Cotacao {
 }
 
 model Tema {
-  id          String   @id @default(uuid())
+  id          String   @id @default(uuid()) // Prisma gera UUID mesmo no MySQL
   nome        String
   primaria    String   @default("#052370")
   secundaria  String   @default("#FFD700")
@@ -88,6 +88,8 @@ model Tema {
   ativo       Boolean  @default(false)
   criadoEm    DateTime @default(now())
   atualizadoEm DateTime @updatedAt
+  
+  @@map("Tema")
 }
 
 model Configuracao {

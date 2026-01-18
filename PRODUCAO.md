@@ -6,7 +6,7 @@
 
 ```bash
 # Criar .env.production
-DATABASE_URL=postgresql://user:pass@localhost:5432/lotbicho
+DATABASE_URL=mysql://user:pass@localhost:3306/postenobicho
 AUTH_SECRET=$(openssl rand -hex 32)
 BICHO_CERTO_API=https://seu-monitor.com/api/resultados
 NODE_ENV=production
