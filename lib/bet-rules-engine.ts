@@ -638,6 +638,159 @@ export function conferirQuadraGrupo(
 }
 
 /**
+ * Extrai as 3 dezenas possíveis de um milhar usando EMD (Esquerda, Meio, Direita).
+ * Exemplo: 1234 → [12, 23, 34]
+ */
+function extrairDezenasEMD(milhar: number): number[] {
+  const milharStr = milhar.toString().padStart(4, '0')
+  const esquerda = parseInt(milharStr.slice(0, 2), 10) // Primeiros 2 dígitos
+  const meio = parseInt(milharStr.slice(1, 3), 10)     // Dígitos do meio
+  const direita = parseInt(milharStr.slice(2, 4), 10)   // Últimos 2 dígitos
+  return [esquerda, meio, direita]
+}
+
+/**
+ * Confere um palpite de Quadra de Dezena.
+ * Regra: igual ao duque ou terno de dezena, porém tem que acertar 4 dezenas.
+ * 
+ * @param resultado Lista de milhares sorteadas
+ * @param dezenasApostadas String com dezenas apostadas (ex: "12,23,34,45")
+ * @param pos_from Primeira posição (1-indexed)
+ * @param pos_to Última posição (1-indexed)
+ */
+export function conferirQuadraDezena(
+  resultado: number[],
+  dezenasApostadas: string,
+  pos_from: number,
+  pos_to: number
+): PrizeCalculation {
+  // Parsear dezenas apostadas (assumindo formato separado por vírgula ou espaço)
+  const dezenasApostadasArray = dezenasApostadas
+    .split(/[,\s]+/)
+    .map(d => parseInt(d.trim(), 10))
+    .filter(d => !isNaN(d) && d >= 0 && d <= 99)
+  
+  if (dezenasApostadasArray.length !== 4) {
+    throw new Error('Quadra de Dezena requer exatamente 4 dezenas')
+  }
+  
+  const dezenasApostadasSet = new Set(dezenasApostadasArray)
+  const dezenasEncontradas = new Set<number>()
+  
+  // Verificar cada prêmio no intervalo
+  for (let pos = pos_from - 1; pos < pos_to && pos < resultado.length; pos++) {
+    const premio = resultado[pos]
+    const dezena = premio % 100 // Últimos 2 dígitos
+    
+    if (dezenasApostadasSet.has(dezena)) {
+      dezenasEncontradas.add(dezena)
+    }
+  }
+  
+  // Acertou se encontrou todas as 4 dezenas
+  const hits = dezenasEncontradas.size === 4 ? 1 : 0
+  
+  return {
+    hits,
+    prizePerUnit: 0,
+    totalPrize: 0,
+  }
+}
+
+/**
+ * Confere um palpite de Duque de Dezena EMD.
+ * Regra: para apuração valem os 2 primeiros dígitos, os 2 dígitos do meio ou os 2 últimos dígitos.
+ * Exemplo: resultado 1234, o jogador acerta com as dezenas 12, 23 e 34.
+ * 
+ * @param resultado Lista de milhares sorteadas
+ * @param dezenaApostada Dezena apostada (0-99)
+ * @param pos_from Primeira posição (1-indexed)
+ * @param pos_to Última posição (1-indexed)
+ */
+export function conferirDuqueDezenaEMD(
+  resultado: number[],
+  dezenaApostada: string,
+  pos_from: number,
+  pos_to: number
+): PrizeCalculation {
+  const dezenaApostadaNum = parseInt(dezenaApostada.trim(), 10)
+  
+  if (isNaN(dezenaApostadaNum) || dezenaApostadaNum < 0 || dezenaApostadaNum > 99) {
+    throw new Error('Duque de Dezena EMD requer uma dezena válida (0-99)')
+  }
+  
+  let hits = 0
+  
+  // Verificar cada prêmio no intervalo
+  for (let pos = pos_from - 1; pos < pos_to && pos < resultado.length; pos++) {
+    const premio = resultado[pos]
+    const dezenasEMD = extrairDezenasEMD(premio)
+    
+    // Verificar se a dezena apostada bate com alguma das 3 dezenas EMD
+    if (dezenasEMD.includes(dezenaApostadaNum)) {
+      hits++
+    }
+  }
+  
+  return {
+    hits,
+    prizePerUnit: 0,
+    totalPrize: 0,
+  }
+}
+
+/**
+ * Confere um palpite de Terno de Dezena EMD.
+ * Regra: precisa acertar 3 dezenas diferentes usando EMD (Esquerda, Meio, Direita).
+ * 
+ * @param resultado Lista de milhares sorteadas
+ * @param dezenasApostadas String com dezenas apostadas (ex: "12,23,34")
+ * @param pos_from Primeira posição (1-indexed)
+ * @param pos_to Última posição (1-indexed)
+ */
+export function conferirTernoDezenaEMD(
+  resultado: number[],
+  dezenasApostadas: string,
+  pos_from: number,
+  pos_to: number
+): PrizeCalculation {
+  // Parsear dezenas apostadas
+  const dezenasApostadasArray = dezenasApostadas
+    .split(/[,\s]+/)
+    .map(d => parseInt(d.trim(), 10))
+    .filter(d => !isNaN(d) && d >= 0 && d <= 99)
+  
+  if (dezenasApostadasArray.length !== 3) {
+    throw new Error('Terno de Dezena EMD requer exatamente 3 dezenas')
+  }
+  
+  const dezenasApostadasSet = new Set(dezenasApostadasArray)
+  const dezenasEncontradas = new Set<number>()
+  
+  // Verificar cada prêmio no intervalo
+  for (let pos = pos_from - 1; pos < pos_to && pos < resultado.length; pos++) {
+    const premio = resultado[pos]
+    const dezenasEMD = extrairDezenasEMD(premio)
+    
+    // Verificar quais dezenas EMD batem com as apostadas
+    dezenasEMD.forEach(dezena => {
+      if (dezenasApostadasSet.has(dezena)) {
+        dezenasEncontradas.add(dezena)
+      }
+    })
+  }
+  
+  // Acertou se encontrou todas as 3 dezenas
+  const hits = dezenasEncontradas.size === 3 ? 1 : 0
+  
+  return {
+    hits,
+    prizePerUnit: 0,
+    totalPrize: 0,
+  }
+}
+
+/**
  * Confere um palpite de passe (1º → 2º).
  */
 export function conferirPasse(
@@ -763,6 +916,27 @@ export function conferirPalpite(
       palpite.grupos[1],
       modalidade === 'PASSE_VAI_E_VEM'
     )
+  } else if (modalidade === 'QUADRA_DEZENA') {
+    // Quadra de Dezena: precisa acertar 4 dezenas diferentes
+    if (!palpite.numero) {
+      throw new Error('Quadra de Dezena requer números de dezenas')
+    }
+    calculation = calcularNumero(modalidade, palpite.numero, pos_from, pos_to, valorPorPalpite)
+    prize = conferirQuadraDezena(resultado.prizes, palpite.numero, pos_from, pos_to)
+  } else if (modalidade === 'DUQUE_DEZENA_EMD') {
+    // Duque de Dezena EMD: extrai 3 dezenas de cada milhar (esquerda, meio, direita)
+    if (!palpite.numero) {
+      throw new Error('Duque de Dezena EMD requer uma dezena')
+    }
+    calculation = calcularNumero(modalidade, palpite.numero, pos_from, pos_to, valorPorPalpite)
+    prize = conferirDuqueDezenaEMD(resultado.prizes, palpite.numero, pos_from, pos_to)
+  } else if (modalidade === 'TERNO_DEZENA_EMD') {
+    // Terno de Dezena EMD: precisa acertar 3 dezenas diferentes usando EMD
+    if (!palpite.numero) {
+      throw new Error('Terno de Dezena EMD requer números de dezenas')
+    }
+    calculation = calcularNumero(modalidade, palpite.numero, pos_from, pos_to, valorPorPalpite)
+    prize = conferirTernoDezenaEMD(resultado.prizes, palpite.numero, pos_from, pos_to)
   } else {
     // Modalidade de número
     if (!palpite.numero) {

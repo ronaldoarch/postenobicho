@@ -755,6 +755,7 @@ export async function POST(request: NextRequest) {
           modality: string | null
           modalityName?: string | null
           animalBets: number[][]
+          numeroApostado?: string // Para modalidades numéricas
           position: string | null
           customPosition?: boolean
           customPositionValue?: string
@@ -817,9 +818,23 @@ export async function POST(request: NextRequest) {
             modalityType === 'PASSE_VAI_E_VEM'
           ) {
             palpiteData = { grupos: gruposApostados }
+          } else if (
+            modalityType === 'QUADRA_DEZENA' ||
+            modalityType === 'DUQUE_DEZENA_EMD' ||
+            modalityType === 'TERNO_DEZENA_EMD'
+          ) {
+            // Para modalidades de dezena EMD, precisamos do número apostado
+            if (betData.numeroApostado) {
+              palpiteData = { numero: betData.numeroApostado }
+            } else {
+              // Fallback: tentar converter animais em dezenas (se disponível)
+              // Por enquanto, pulamos se não tiver número
+              console.log(`Modalidade ${modalityType} requer número apostado, mas não encontrado na aposta ${aposta.id}`)
+              continue
+            }
           } else {
-            // Para modalidades numéricas, precisaríamos do número apostado
-            // Por enquanto, pulamos modalidades numéricas
+            // Para outras modalidades numéricas, precisaríamos do número apostado
+            // Por enquanto, pulamos modalidades numéricas não implementadas
             console.log(`Modalidade numérica ${modalityType} ainda não suportada na liquidação`)
             continue
           }
