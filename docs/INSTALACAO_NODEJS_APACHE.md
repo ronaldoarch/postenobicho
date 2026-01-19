@@ -59,40 +59,84 @@ node --version
 
 ---
 
-## 📥 Passo 2: Receber Build e Configurar a Aplicação
+## 📥 Passo 2: Fazer Deploy via SSH
 
 **IMPORTANTE:** A aplicação será enviada já compilada (build), então não é necessário fazer build no servidor.
 
+### Opção A: Deploy via SCP (do seu computador para o servidor)
+
 ```bash
-# 1. Criar diretório para a aplicação
-cd /var/www  # ou outro diretório de sua preferência
-mkdir -p postenobicho
-cd postenobicho
+# 1. No seu computador LOCAL, conectar via SSH e preparar diretório
+ssh root@IP_DO_SERVIDOR
 
-# 2. Receber arquivos do build (via FTP, SCP, ou outro método)
-# Os arquivos devem incluir:
-# - .next/ (pasta com build - OBRIGATÓRIO)
-# - node_modules/ (dependências instaladas - OBRIGATÓRIO)
-# - public/ (arquivos estáticos - OBRIGATÓRIO)
-# - package.json (OBRIGATÓRIO)
-# - prisma/ (schema.prisma e migrations - OBRIGATÓRIO)
-# - scripts/ (scripts auxiliares - opcional)
-# - ecosystem.config.js (opcional, mas recomendado)
+# 2. No servidor, criar diretório
+mkdir -p /var/www/postenobicho
+cd /var/www/postenobicho
+exit
 
-# 3. Verificar estrutura recebida
+# 3. No seu computador LOCAL, fazer upload do build via SCP
+# Certifique-se de estar na pasta onde está o build
+scp -r .next/ root@IP_DO_SERVIDOR:/var/www/postenobicho/
+scp -r node_modules/ root@IP_DO_SERVIDOR:/var/www/postenobicho/
+scp -r public/ root@IP_DO_SERVIDOR:/var/www/postenobicho/
+scp -r prisma/ root@IP_DO_SERVIDOR:/var/www/postenobicho/
+scp package.json root@IP_DO_SERVIDOR:/var/www/postenobicho/
+scp package-lock.json root@IP_DO_SERVIDOR:/var/www/postenobicho/
+scp ecosystem.config.js root@IP_DO_SERVIDOR:/var/www/postenobicho/  # Se existir
+scp -r scripts/ root@IP_DO_SERVIDOR:/var/www/postenobicho/  # Se existir
+
+# OU fazer upload de tudo de uma vez (mais rápido)
+# No seu computador LOCAL, dentro da pasta do build:
+tar -czf build.tar.gz .next node_modules public prisma package.json package-lock.json ecosystem.config.js scripts
+scp build.tar.gz root@IP_DO_SERVIDOR:/var/www/postenobicho/
+ssh root@IP_DO_SERVIDOR "cd /var/www/postenobicho && tar -xzf build.tar.gz && rm build.tar.gz"
+```
+
+### Opção B: Deploy via rsync (mais eficiente)
+
+```bash
+# No seu computador LOCAL, dentro da pasta do build:
+rsync -avz --progress \
+  .next/ \
+  node_modules/ \
+  public/ \
+  prisma/ \
+  package.json \
+  package-lock.json \
+  ecosystem.config.js \
+  scripts/ \
+  root@IP_DO_SERVIDOR:/var/www/postenobicho/
+```
+
+### Opção C: Deploy direto via SSH (tudo no servidor)
+
+```bash
+# 1. Conectar ao servidor
+ssh root@IP_DO_SERVIDOR
+
+# 2. Criar diretório
+mkdir -p /var/www/postenobicho
+cd /var/www/postenobicho
+
+# 3. Receber arquivos do build (você pode fazer upload via FTP/SFTP primeiro)
+# Ou usar git clone se o build estiver em um repositório
+# git clone https://github.com/ronaldoarch/postenobicho.git .
+# git checkout build-branch  # Se o build estiver em uma branch específica
+
+# 4. Verificar estrutura recebida
 ls -la
 ls -la .next/        # Deve existir
 ls -la node_modules/ # Deve existir
 ls -la prisma/       # Deve existir
 
-# 4. Instalar apenas dependências de produção (se node_modules não vier completo)
+# 5. Instalar apenas dependências de produção (se node_modules não vier completo)
 # Isso só é necessário se o build não incluir node_modules completo
 npm ci --production --ignore-scripts
 
-# 5. Gerar Prisma Client (SEMPRE necessário, mesmo com build)
+# 6. Gerar Prisma Client (SEMPRE necessário, mesmo com build)
 npx prisma generate
 
-# 6. Criar arquivo .env
+# 7. Criar arquivo .env
 nano .env
 ```
 
@@ -478,7 +522,15 @@ curl http://localhost:3000/api/resultados/liquidar
 
 ## 🎯 Resumo dos Comandos Essenciais
 
+### Via SSH (tudo no servidor):
+
 ```bash
+# Conectar ao servidor
+ssh root@IP_DO_SERVIDOR
+
+# Navegar para diretório
+cd /var/www/postenobicho
+
 # Iniciar aplicação
 pm2 start ecosystem.config.js
 
@@ -492,10 +544,23 @@ pm2 logs lotbicho
 pm2 stop lotbicho
 
 # Reiniciar Apache
-sudo systemctl restart apache2
+systemctl restart apache2
 
 # Ver logs do Apache
-sudo tail -f /var/log/apache2/postenobicho-access.log
+tail -f /var/log/apache2/postenobicho-access.log
+```
+
+### Deploy rápido (do seu computador):
+
+```bash
+# Upload do build
+rsync -avz --progress \
+  .next/ node_modules/ public/ prisma/ \
+  package.json package-lock.json ecosystem.config.js \
+  root@IP_DO_SERVIDOR:/var/www/postenobicho/
+
+# Conectar e reiniciar
+ssh root@IP_DO_SERVIDOR "cd /var/www/postenobicho && pm2 restart lotbicho"
 ```
 
 ---
@@ -507,6 +572,63 @@ sudo tail -f /var/log/apache2/postenobicho-access.log
 3. ✅ **PM2 gerencia processos** - Reinicia automático em caso de falha
 4. ✅ **Fácil manutenção** - Logs e monitoramento simples
 5. ✅ **Escalável** - Pode adicionar mais instâncias se necessário
+6. ✅ **Deploy via SSH** - Rápido e seguro, acesso root facilita tudo
+
+---
+
+## 🚀 Script de Deploy Rápido (Opcional)
+
+Você pode criar um script para automatizar o deploy:
+
+```bash
+# Criar arquivo deploy.sh no seu computador LOCAL
+nano deploy.sh
+```
+
+```bash
+#!/bin/bash
+
+# Configurações
+SERVER_IP="IP_DO_SEU_SERVIDOR"
+SERVER_USER="root"
+APP_DIR="/var/www/postenobicho"
+BUILD_DIR="./"  # Diretório onde está o build
+
+echo "🚀 Iniciando deploy..."
+
+# Upload dos arquivos
+echo "📤 Fazendo upload dos arquivos..."
+rsync -avz --progress \
+  --exclude 'node_modules' \
+  --exclude '.next/cache' \
+  ${BUILD_DIR}.next/ \
+  ${BUILD_DIR}node_modules/ \
+  ${BUILD_DIR}public/ \
+  ${BUILD_DIR}prisma/ \
+  ${BUILD_DIR}package.json \
+  ${BUILD_DIR}package-lock.json \
+  ${BUILD_DIR}ecosystem.config.js \
+  ${SERVER_USER}@${SERVER_IP}:${APP_DIR}/
+
+# Conectar e executar comandos no servidor
+echo "⚙️  Configurando no servidor..."
+ssh ${SERVER_USER}@${SERVER_IP} << EOF
+cd ${APP_DIR}
+npx prisma generate
+pm2 restart lotbicho || pm2 start ecosystem.config.js
+pm2 save
+EOF
+
+echo "✅ Deploy concluído!"
+```
+
+```bash
+# Dar permissão de execução
+chmod +x deploy.sh
+
+# Executar deploy
+./deploy.sh
+```
 
 ---
 
