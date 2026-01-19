@@ -59,18 +59,40 @@ node --version
 
 ---
 
-## 📥 Passo 2: Clonar e Configurar a Aplicação
+## 📥 Passo 2: Receber Build e Configurar a Aplicação
+
+**IMPORTANTE:** A aplicação será enviada já compilada (build), então não é necessário fazer build no servidor.
 
 ```bash
-# 1. Clonar repositório (ou fazer upload dos arquivos)
+# 1. Criar diretório para a aplicação
 cd /var/www  # ou outro diretório de sua preferência
-git clone https://github.com/ronaldoarch/postenobicho.git
+mkdir -p postenobicho
 cd postenobicho
 
-# 2. Instalar dependências
-npm ci --production
+# 2. Receber arquivos do build (via FTP, SCP, ou outro método)
+# Os arquivos devem incluir:
+# - .next/ (pasta com build - OBRIGATÓRIO)
+# - node_modules/ (dependências instaladas - OBRIGATÓRIO)
+# - public/ (arquivos estáticos - OBRIGATÓRIO)
+# - package.json (OBRIGATÓRIO)
+# - prisma/ (schema.prisma e migrations - OBRIGATÓRIO)
+# - scripts/ (scripts auxiliares - opcional)
+# - ecosystem.config.js (opcional, mas recomendado)
 
-# 3. Criar arquivo .env
+# 3. Verificar estrutura recebida
+ls -la
+ls -la .next/        # Deve existir
+ls -la node_modules/ # Deve existir
+ls -la prisma/       # Deve existir
+
+# 4. Instalar apenas dependências de produção (se node_modules não vier completo)
+# Isso só é necessário se o build não incluir node_modules completo
+npm ci --production --ignore-scripts
+
+# 5. Gerar Prisma Client (SEMPRE necessário, mesmo com build)
+npx prisma generate
+
+# 6. Criar arquivo .env
 nano .env
 ```
 
@@ -121,9 +143,6 @@ EXIT;
 ### Executar migrações:
 
 ```bash
-# Gerar Prisma Client
-npx prisma generate
-
 # Criar tabelas no banco
 npx prisma migrate deploy
 
@@ -133,16 +152,21 @@ npx prisma db push
 
 ---
 
-## 🔨 Passo 4: Build da Aplicação
+## 🔨 Passo 4: Verificar e Testar a Aplicação
+
+**NOTA:** Como a aplicação já vem buildada, não é necessário fazer build novamente.
 
 ```bash
-# Fazer build de produção
-npm run build
+# Verificar se a pasta .next existe (build)
+ls -la .next/
 
 # Testar se funciona
 npm start
 # Deve iniciar na porta 3000
 # Acesse: http://localhost:3000
+
+# Se der erro, verificar logs
+pm2 logs lotbicho
 ```
 
 ---
@@ -155,8 +179,14 @@ PM2 mantém a aplicação rodando e reinicia automaticamente em caso de falha.
 # Instalar PM2 globalmente
 sudo npm install -g pm2
 
+# Verificar se ecosystem.config.js existe (se não existir, criar manualmente)
+# O arquivo deve estar na raiz do projeto
+
 # Iniciar aplicação com PM2
 pm2 start ecosystem.config.js
+
+# OU iniciar diretamente com npm start
+pm2 start npm --name "lotbicho" -- start
 
 # Ver status
 pm2 status
@@ -274,16 +304,32 @@ crontab -e
 */5 9-22 * * * curl -X POST http://localhost:3000/api/resultados/liquidar -H "Content-Type: application/json" -d '{}' >> /var/log/postenobicho-liquidacao.log 2>&1
 ```
 
-Ou usando script:
+Ou usando script (se o diretório scripts/ existir no build):
 
 ```bash
+# Verificar se script existe
+ls -la /var/www/postenobicho/scripts/cron/liquidar.sh
+
+# Se existir, dar permissão de execução
+chmod +x /var/www/postenobicho/scripts/cron/liquidar.sh
+
+# Adicionar ao crontab
+crontab -e
+# Adicionar: */5 9-22 * * * /var/www/postenobicho/scripts/cron/liquidar.sh
+```
+
+**OU criar script manualmente:**
+
+```bash
+# Criar diretório se não existir
+mkdir -p /var/www/postenobicho/scripts/cron
+
 # Criar script
 nano /var/www/postenobicho/scripts/cron/liquidar.sh
 ```
 
 ```bash
 #!/bin/bash
-cd /var/www/postenobicho
 curl -X POST http://localhost:3000/api/resultados/liquidar \
   -H "Content-Type: application/json" \
   -d '{}' \
@@ -345,6 +391,12 @@ sudo tail -f /var/log/apache2/postenobicho-error.log
 ### Problema: Aplicação não inicia
 
 ```bash
+# Verificar se build existe
+ls -la .next/
+
+# Verificar se node_modules existe
+ls -la node_modules/
+
 # Verificar se porta 3000 está em uso
 sudo netstat -tulpn | grep 3000
 
@@ -353,6 +405,9 @@ pm2 logs lotbicho --lines 50
 
 # Verificar variáveis de ambiente
 pm2 env lotbicho
+
+# Tentar iniciar manualmente para ver erros
+npm start
 ```
 
 ### Problema: Apache não conecta ao Node.js
@@ -374,6 +429,25 @@ sudo apache2ctl configtest
 # Dar permissões corretas ao diretório
 sudo chown -R www-data:www-data /var/www/postenobicho/public/uploads
 sudo chmod -R 755 /var/www/postenobicho/public/uploads
+
+# Se usar PM2 com usuário específico, ajustar permissões
+sudo chown -R seu-usuario:seu-usuario /var/www/postenobicho
+```
+
+### Problema: Build não encontrado ou incompleto
+
+```bash
+# Verificar estrutura do build
+ls -la .next/
+ls -la .next/standalone/  # Se usar output standalone
+
+# Se faltar arquivos, solicitar novo build completo
+# O build deve incluir:
+# - .next/ (pasta completa)
+# - node_modules/ (dependências de produção)
+# - public/ (arquivos estáticos)
+# - package.json
+# - prisma/ (schema.prisma e migrations)
 ```
 
 ---
