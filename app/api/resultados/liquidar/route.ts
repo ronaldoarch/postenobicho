@@ -307,6 +307,7 @@ export async function POST(request: NextRequest) {
       })
       
       // Buscar resultados de cada loteria/data única
+      // FILTRO: Apenas extrações do Rio de Janeiro (RJ)
       const promessasResultados = Array.from(apostasPorLoteriaData.values()).map(async ({ loteria, data }) => {
         try {
           // Buscar extração para obter nome da loteria
@@ -317,6 +318,12 @@ export async function POST(request: NextRequest) {
           
           if (!extracao) {
             console.warn(`⚠️ Extração não encontrada para loteria: ${loteria}`)
+            return []
+          }
+          
+          // FILTRO: Apenas processar extrações do Rio de Janeiro
+          if (extracao.estado !== 'RJ') {
+            console.log(`⏭️  Pulando extração ${extracao.name} - Estado: ${extracao.estado} (apenas RJ permitido)`)
             return []
           }
           
@@ -435,7 +442,14 @@ export async function POST(request: NextRequest) {
           const extracao = !isNaN(extracaoId)
             ? extracoes.find((e) => e.id === extracaoId)
             : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria?.toLowerCase() || '')
-          const nomeExtracao = extracao?.name || aposta.loteria || ''
+          
+          // FILTRO: Apenas processar apostas de extrações do Rio de Janeiro
+          if (!extracao || extracao.estado !== 'RJ') {
+            console.log(`⏭️  Pulando aposta ${aposta.id} - Extração não é do RJ (Estado: ${extracao?.estado || 'N/A'})`)
+            continue
+          }
+          
+          const nomeExtracao = extracao.name || aposta.loteria || ''
           
           // Criar lista de nomes possíveis com variações conhecidas
           const nomeBase = nomeExtracao.toLowerCase().trim()
