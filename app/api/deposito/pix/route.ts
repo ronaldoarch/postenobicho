@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(req: NextRequest) {
   try {
-    const session = cookies().get('lotbicho_session')?.value
+    const session = cookies().get('postenobicho_session')?.value
     const payload = parseSessionToken(session)
 
     if (!payload) {

@@ -202,13 +202,18 @@ model Saque {
   id        Int      @id @default(autoincrement())
   usuarioId Int
   valor     Float
-  status    String   @default("pendente") // pendente, aprovado, rejeitado
+  status    String   @default("pendente") // pendente, aprovado, rejeitado, saque-pago, saque-falhou
   motivo    String?
+  chavePix  String?  // Chave PIX para saque
+  tipoChavePix String? // CPF, CNPJ, PHONE, EMAIL, RANDOM
+  referenciaExterna String? // ID da transação no gateway
+  gatewayId  Int?    // ID do gateway usado (se aplicável)
   usuario   Usuario  @relation(fields: [usuarioId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([usuarioId])
+  @@index([status])
 }
 
 model Transacao {
