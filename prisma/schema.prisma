@@ -148,12 +148,16 @@ model CotacaoEspecial {
 model Gateway {
   id        Int      @id @default(autoincrement())
   name      String
+  tipo      String   @default("receba") // receba, nxgate, etc.
   baseUrl   String
   apiKey    String
+  webhookUrl String? // URL do webhook (opcional)
   sandbox   Boolean  @default(true)
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  @@index([tipo, active])
 }
 
 model Usuario {

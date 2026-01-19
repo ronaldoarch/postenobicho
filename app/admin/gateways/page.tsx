@@ -5,16 +5,20 @@ import { useEffect, useState } from 'react'
 interface Gateway {
   id: number
   name: string
+  tipo: string
   baseUrl: string
   apiKey: string
+  webhookUrl?: string
   sandbox: boolean
   active: boolean
 }
 
 const emptyForm: Omit<Gateway, 'id'> = {
   name: '',
+  tipo: 'receba',
   baseUrl: '',
   apiKey: '',
+  webhookUrl: '',
   sandbox: true,
   active: true,
 }
@@ -68,8 +72,10 @@ export default function GatewaysPage() {
     setEditingId(gw.id)
     setForm({
       name: gw.name,
+      tipo: gw.tipo || 'receba',
       baseUrl: gw.baseUrl,
       apiKey: gw.apiKey,
+      webhookUrl: gw.webhookUrl || '',
       sandbox: gw.sandbox,
       active: gw.active,
     })
@@ -116,8 +122,20 @@ export default function GatewaysPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder="Receba.online"
+              placeholder="Receba.online ou Nxgate"
             />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-gray-700">Tipo</label>
+            <select
+              required
+              value={form.tipo}
+              onChange={(e) => setForm({ ...form, tipo: e.target.value })}
+              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
+            >
+              <option value="receba">Receba Online</option>
+              <option value="nxgate">Nxgate</option>
+            </select>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-gray-700">Base URL</label>
@@ -126,7 +144,16 @@ export default function GatewaysPage() {
               value={form.baseUrl}
               onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder="https://sandbox.receba.online"
+              placeholder={form.tipo === 'nxgate' ? 'https://nxgate.com.br' : 'https://sandbox.receba.online'}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-semibold text-gray-700">Webhook URL (opcional)</label>
+            <input
+              value={form.webhookUrl || ''}
+              onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
+              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
+              placeholder="https://seudominio.com/api/webhooks/nxgate"
             />
           </div>
           <div className="flex flex-col gap-2 md:col-span-2">
@@ -136,7 +163,7 @@ export default function GatewaysPage() {
               value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder="Bearer token"
+              placeholder="API Key do gateway"
             />
           </div>
           <div className="flex items-center gap-4">
@@ -192,6 +219,7 @@ export default function GatewaysPage() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Base URL</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sandbox</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ativo</th>
@@ -201,7 +229,7 @@ export default function GatewaysPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {gateways.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-sm text-gray-500 text-center">
+                  <td colSpan={7} className="px-6 py-4 text-sm text-gray-500 text-center">
                     Nenhum gateway cadastrado.
                   </td>
                 </tr>
@@ -210,6 +238,13 @@ export default function GatewaysPage() {
                 <tr key={gw.id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{gw.id}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{gw.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      gw.tipo === 'nxgate' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {gw.tipo === 'nxgate' ? 'Nxgate' : 'Receba'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{gw.baseUrl}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <span className={`px-2 py-1 rounded-full text-xs ${gw.sandbox ? 'bg-yellow/20 text-yellow-800' : 'bg-green-100 text-green-800'}`}>

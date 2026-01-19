@@ -70,18 +70,25 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // API Key é obrigatória
-    const apiKey = process.env.NXGATE_API_KEY
+    // Buscar gateway Nxgate ativo do banco de dados
+    const { getActiveGatewayByType } = await import('@/lib/gateways-store')
+    const gateway = await getActiveGatewayByType('nxgate')
+    
+    // Fallback para variável de ambiente se não houver gateway configurado
+    const apiKey = gateway?.apiKey || process.env.NXGATE_API_KEY
+    const baseUrl = gateway?.baseUrl || 'https://nxgate.com.br'
+    const webhookUrl = gateway?.webhookUrl || process.env.NXGATE_WEBHOOK_URL
+    
     if (!apiKey) {
-      console.error('NXGATE_API_KEY não configurado nas variáveis de ambiente')
+      console.error('Gateway Nxgate não configurado e NXGATE_API_KEY não encontrado')
       return NextResponse.json(
-        { error: 'Configuração da API não encontrada. Entre em contato com o suporte.' },
+        { error: 'Gateway Nxgate não configurado. Configure no painel admin ou nas variáveis de ambiente.' },
         { status: 500 }
       )
     }
 
-    // URL do webhook
-    const webhookUrl = process.env.NXGATE_WEBHOOK_URL || `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/webhooks/nxgate`
+    // URL do webhook (usar do gateway, variável de ambiente ou construir automaticamente)
+    const finalWebhookUrl = webhookUrl || process.env.NXGATE_WEBHOOK_URL || `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/webhooks/nxgate`
 
     // Payload conforme documentação do Nxgate
     const saquePayload: NxgateSaquePixPayload = {
@@ -89,11 +96,12 @@ export async function POST(req: NextRequest) {
       valor: parseFloat(valor.toFixed(2)),
       chave_pix: chavePix,
       tipo_chave: tipoChave,
-      webhook: webhookUrl,
+      webhook: finalWebhookUrl,
     }
 
     console.log('=== DEBUG SAQUE PIX NXGATE ===')
-    console.log('Base URL: https://nxgate.com.br')
+    console.log('Gateway ID:', gateway?.id || 'N/A (variável de ambiente)')
+    console.log('Base URL:', baseUrl)
     console.log('API Key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'MISSING')
     console.log('Payload:', {
       valor: saquePayload.valor,
@@ -104,7 +112,7 @@ export async function POST(req: NextRequest) {
     console.log('========================')
 
     // Solicitar saque PIX via Nxgate
-    const saqueResponse = await nxgateSaquePix({ apiKey }, saquePayload)
+    const saqueResponse = await nxgateSaquePix({ apiKey, baseUrl }, saquePayload)
     console.log('Resposta recebida:', saqueResponse)
 
     const transactionId = saqueResponse.idTransaction
@@ -133,6 +141,7 @@ export async function POST(req: NextRequest) {
         chavePix: chavePix,
         tipoChavePix: tipoChave,
         referenciaExterna: transactionId,
+        gatewayId: gateway?.id,
       },
     })
 
@@ -144,6 +153,7 @@ export async function POST(req: NextRequest) {
         status: 'pendente',
         valor,
         referenciaExterna: transactionId,
+        gatewayId: gateway?.id,
         descricao: `Saque PIX via Nxgate - Aguardando processamento`,
       },
     })
