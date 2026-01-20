@@ -256,6 +256,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Buscar apostas pendentes
+    // FILTRO: Apenas apostas do Rio de Janeiro (RJ)
     const whereClause: any = {
       status: 'pendente',
     }
@@ -264,7 +265,8 @@ export async function POST(request: NextRequest) {
     if (dataConcurso) whereClause.dataConcurso = new Date(dataConcurso)
     if (horario) whereClause.horario = horario
 
-    const apostasPendentes = await prisma.aposta.findMany({
+    // Buscar todas as apostas pendentes primeiro
+    let todasApostasPendentes = await prisma.aposta.findMany({
       where: whereClause,
       include: {
         usuario: {
@@ -276,6 +278,22 @@ export async function POST(request: NextRequest) {
         },
       },
     })
+
+    // FILTRO: Filtrar apenas apostas do Rio de Janeiro (RJ)
+    const apostasPendentes = todasApostasPendentes.filter((aposta) => {
+      if (!aposta.loteria) return false
+      
+      // Buscar extração pelo ID ou nome
+      const extracaoId = parseInt(aposta.loteria, 10)
+      const extracao = !isNaN(extracaoId)
+        ? extracoes.find((e) => e.id === extracaoId)
+        : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria?.toLowerCase() || '')
+      
+      // Apenas processar apostas de extrações do Rio de Janeiro
+      return extracao?.estado === 'RJ'
+    })
+
+    console.log(`📊 Total de apostas pendentes: ${todasApostasPendentes.length}, do RJ: ${apostasPendentes.length}`)
 
     if (apostasPendentes.length === 0) {
       return NextResponse.json({
@@ -308,7 +326,27 @@ export async function POST(request: NextRequest) {
       
       // Buscar resultados de cada loteria/data única
       // FILTRO: Apenas extrações do Rio de Janeiro (RJ)
-      const promessasResultados = Array.from(apostasPorLoteriaData.values()).map(async ({ loteria, data }) => {
+      const promessasResultados = Array.from(apostasPorLoteriaData.values())
+        .filter(({ loteria }) => {
+          // Filtrar apenas loterias do RJ antes de buscar resultados
+          const extracaoId = parseInt(loteria, 10)
+          const extracao = !isNaN(extracaoId)
+            ? extracoes.find((e) => e.id === extracaoId)
+            : extracoes.find((e) => e.name.toLowerCase() === loteria.toLowerCase())
+          
+          if (!extracao) {
+            return false
+          }
+          
+          // Apenas processar extrações do Rio de Janeiro
+          if (extracao.estado !== 'RJ') {
+            console.log(`⏭️  Pulando busca de resultados para ${extracao.name} - Estado: ${extracao.estado} (apenas RJ permitido)`)
+            return false
+          }
+          
+          return true
+        })
+        .map(async ({ loteria, data }) => {
         try {
           // Buscar extração para obter nome da loteria
           const extracaoId = parseInt(loteria, 10)
@@ -321,13 +359,13 @@ export async function POST(request: NextRequest) {
             return []
           }
           
-          // FILTRO: Apenas processar extrações do Rio de Janeiro
+          // FILTRO: Apenas processar extrações do Rio de Janeiro (dupla verificação)
           if (extracao.estado !== 'RJ') {
             console.log(`⏭️  Pulando extração ${extracao.name} - Estado: ${extracao.estado} (apenas RJ permitido)`)
             return []
           }
           
-          // Buscar resultados do bichocerto.com
+          // Buscar resultados do bichocerto.com apenas para RJ
           const resultadosBichoCerto = await buscarResultadosPorNome(extracao.name, data)
           
           // Converter para formato ResultadoItem
@@ -420,6 +458,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Processar cada aposta
+    // FILTRO: Apenas apostas do Rio de Janeiro já foram filtradas na query acima
     for (const aposta of apostasPendentes) {
       try {
         // Verificar se já passou o horário de apuração
@@ -443,11 +482,16 @@ export async function POST(request: NextRequest) {
             ? extracoes.find((e) => e.id === extracaoId)
             : extracoes.find((e) => e.name.toLowerCase() === aposta.loteria?.toLowerCase() || '')
           
-          // FILTRO: Apenas processar apostas de extrações do Rio de Janeiro
+          // FILTRO: Apenas processar apostas de extrações do Rio de Janeiro (dupla verificação)
           if (!extracao || extracao.estado !== 'RJ') {
             console.log(`⏭️  Pulando aposta ${aposta.id} - Extração não é do RJ (Estado: ${extracao?.estado || 'N/A'})`)
             continue
           }
+          
+          // Garantir que apenas resultados do RJ sejam usados
+          resultadosFiltrados = resultadosFiltrados.filter((r) => 
+            (r.estado || '').toUpperCase() === 'RJ'
+          )
           
           const nomeExtracao = extracao.name || aposta.loteria || ''
           
@@ -762,8 +806,21 @@ export async function POST(request: NextRequest) {
           groups: grupos,
         }
 
-        // Extrair dados da aposta
-        const detalhes = aposta.detalhes as any
+        // Extrair dados da aposta (parse JSON se for string)
+        let detalhes: any = null
+        if (aposta.detalhes) {
+          if (typeof aposta.detalhes === 'string') {
+            try {
+              detalhes = JSON.parse(aposta.detalhes)
+            } catch (e) {
+              console.error(`Erro ao fazer parse de detalhes da aposta ${aposta.id}:`, e)
+              continue
+            }
+          } else {
+            detalhes = aposta.detalhes
+          }
+        }
+        
         if (!detalhes || !detalhes.betData) {
           console.log(`Aposta ${aposta.id} não tem betData`)
           continue
@@ -949,6 +1006,7 @@ export async function POST(request: NextRequest) {
             continue
           }
 
+          // Calcular prêmio normalmente primeiro
           const conferencia = conferirPalpite(
             resultadoOficial,
             modalityType,
@@ -960,7 +1018,7 @@ export async function POST(request: NextRequest) {
           )
 
           // Verificar se milhar ou centena está cotada APENAS SE GANHOU
-          // A verificação ocorre no momento da apuração, verificando o número que ganhou
+          // A cotação especial SUBSTITUI a odd normal, não multiplica o prêmio
           let premioFinal = conferencia.totalPrize
           
           if (conferencia.totalPrize > 0 && (modalityType === 'MILHAR' || modalityType === 'CENTENA' || modalityType === 'MILHAR_CENTENA')) {
@@ -970,26 +1028,48 @@ export async function POST(request: NextRequest) {
               const premioStr = premioGanho.toString().padStart(4, '0')
               
               if (modalityType === 'MILHAR') {
-                const milharCotada = await verificarMilharCotada(premioStr)
-                if (milharCotada) {
-                  // Aplicar redução de 1/6 apenas no prêmio desta posição
-                  // Como já calculamos o prêmio total, aplicamos a redução proporcional
-                  premioFinal = premioFinal / 6
+                const { cotada, cotacao } = await verificarMilharCotada(premioStr)
+                if (cotada) {
+                  // A cotação especial substitui a odd normal
+                  // Exemplo: se odd normal é 6000x e cotação é 1000x, recalcula usando 1000x
+                  if (cotacao !== null && cotacao > 0) {
+                    const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                    const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                    // Recalcular: (cotacao_especial / odd_normal) * premio_calculado
+                    premioFinal = (cotacao / oddNormal) * conferencia.totalPrize
+                  } else {
+                    // Sem cotação definida: aplica redução padrão de 1/6
+                    premioFinal = conferencia.totalPrize / 6
+                  }
                   break // Apenas precisa verificar uma vez
                 }
               } else if (modalityType === 'CENTENA') {
                 const centenaStr = premioStr.slice(-3)
-                const centenaCotada = await verificarCentenaCotada(centenaStr)
-                if (centenaCotada) {
-                  premioFinal = premioFinal / 6
+                const { cotada, cotacao } = await verificarCentenaCotada(centenaStr)
+                if (cotada) {
+                  if (cotacao !== null && cotacao > 0) {
+                    const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                    const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                    premioFinal = (cotacao / oddNormal) * conferencia.totalPrize
+                  } else {
+                    premioFinal = conferencia.totalPrize / 6
+                  }
                   break
                 }
               } else if (modalityType === 'MILHAR_CENTENA') {
-                const milharCotada = await verificarMilharCotada(premioStr)
+                const { cotada: milharCotada, cotacao: milharCotacao } = await verificarMilharCotada(premioStr)
                 const centenaStr = premioStr.slice(-3)
-                const centenaCotada = await verificarCentenaCotada(centenaStr)
+                const { cotada: centenaCotada, cotacao: centenaCotacao } = await verificarCentenaCotada(centenaStr)
                 if (milharCotada || centenaCotada) {
-                  premioFinal = premioFinal / 6
+                  // Usa a cotação da milhar se disponível, senão usa da centena
+                  const cotacaoUsar = milharCotacao ?? centenaCotacao
+                  if (cotacaoUsar !== null && cotacaoUsar > 0) {
+                    const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                    const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                    premioFinal = (cotacaoUsar / oddNormal) * conferencia.totalPrize
+                  } else {
+                    premioFinal = conferencia.totalPrize / 6
+                  }
                   break
                 }
               }
@@ -1002,18 +1082,32 @@ export async function POST(request: NextRequest) {
         // Atualizar aposta e saldo do usuário
         if (premioTotalAposta > 0) {
           await prisma.$transaction(async (tx) => {
+            // Parse dos detalhes existentes (se for string JSON)
+            let detalhesObj: any = {}
+            if (detalhes) {
+              if (typeof detalhes === 'string') {
+                try {
+                  detalhesObj = JSON.parse(detalhes)
+                } catch (e) {
+                  detalhesObj = {}
+                }
+              } else if (typeof detalhes === 'object') {
+                detalhesObj = detalhes
+              }
+            }
+
             // Atualizar aposta
             await tx.aposta.update({
               where: { id: aposta.id },
               data: {
                 status: 'liquidado',
                 retornoPrevisto: premioTotalAposta,
-                detalhes: {
-                  ...detalhes,
+                detalhes: JSON.stringify({
+                  ...detalhesObj,
                   resultadoOficial: resultadoOficial,
                   premioTotal: premioTotalAposta,
                   liquidadoEm: new Date().toISOString(),
-                },
+                }),
               },
             })
 
@@ -1031,17 +1125,31 @@ export async function POST(request: NextRequest) {
           liquidadas++
           premioTotalGeral += premioTotalAposta
         } else {
+          // Parse dos detalhes existentes (se for string JSON)
+          let detalhesObj: any = {}
+          if (detalhes) {
+            if (typeof detalhes === 'string') {
+              try {
+                detalhesObj = JSON.parse(detalhes)
+              } catch (e) {
+                detalhesObj = {}
+              }
+            } else if (typeof detalhes === 'object') {
+              detalhesObj = detalhes
+            }
+          }
+
           // Marcar como não ganhou
           await prisma.aposta.update({
             where: { id: aposta.id },
             data: {
               status: 'perdida',
-              detalhes: {
-                ...detalhes,
+              detalhes: JSON.stringify({
+                ...detalhesObj,
                 resultadoOficial: resultadoOficial,
                 premioTotal: 0,
                 liquidadoEm: new Date().toISOString(),
-              },
+              }),
             },
           })
         }

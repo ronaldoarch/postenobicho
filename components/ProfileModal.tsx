@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import ConfirmacaoBonita from './ConfirmacaoBonita'
 
 interface ProfileModalProps {
   isOpen: boolean
@@ -20,6 +21,8 @@ interface ProfileModalProps {
 }
 
 export default function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalProps) {
+  const [showConfirmacao, setShowConfirmacao] = useState(false)
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
@@ -44,11 +47,13 @@ export default function ProfileModal({ isOpen, onClose, user, onLogout }: Profil
   }, [isOpen, onClose])
 
   const handleLogout = async () => {
-    if (confirm('Tem certeza que deseja sair?')) {
-      await onLogout()
-      onClose()
-      window.location.href = '/'
-    }
+    setShowConfirmacao(true)
+  }
+
+  const confirmarLogout = async () => {
+    await onLogout()
+    onClose()
+    window.location.href = '/'
   }
 
   if (!isOpen) return null
@@ -206,6 +211,18 @@ export default function ProfileModal({ isOpen, onClose, user, onLogout }: Profil
           </>
         )}
       </div>
+
+      {/* Confirmação de logout */}
+      <ConfirmacaoBonita
+        isOpen={showConfirmacao}
+        onClose={() => setShowConfirmacao(false)}
+        onConfirm={confirmarLogout}
+        titulo="Confirmar Saída"
+        mensagem="Tem certeza que deseja sair?"
+        textoConfirmar="Sair"
+        textoCancelar="Cancelar"
+        tipo="aviso"
+      />
     </div>
   )
 }

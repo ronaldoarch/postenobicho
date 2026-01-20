@@ -13,6 +13,8 @@ interface Tema {
     sucesso: string
     texto: string
     textoSecundario: string
+    textoDestaque?: string
+    textoTerciario?: string
     fundo: string
     fundoSecundario: string
   }
@@ -35,6 +37,8 @@ export default function TemasPage() {
       sucesso: '#25D366',
       texto: '#1C1C1C',
       textoSecundario: '#4A4A4A',
+      textoDestaque: '#1F2937',
+      textoTerciario: '#6B7280',
       fundo: '#F5F5F5',
       fundoSecundario: '#FFFFFF',
     },
@@ -108,7 +112,11 @@ export default function TemasPage() {
     setEditingTema(tema)
     setFormData({
       nome: tema.nome,
-      cores: tema.cores,
+      cores: {
+        ...tema.cores,
+        textoDestaque: tema.cores.textoDestaque || '#1F2937',
+        textoTerciario: tema.cores.textoTerciario || '#6B7280',
+      },
     })
     setShowForm(true)
   }
@@ -163,6 +171,8 @@ export default function TemasPage() {
         sucesso: '#25D366',
         texto: '#1C1C1C',
         textoSecundario: '#4A4A4A',
+        textoDestaque: '#1F2937',
+        textoTerciario: '#6B7280',
         fundo: '#F5F5F5',
         fundoSecundario: '#FFFFFF',
       },
@@ -379,6 +389,66 @@ export default function TemasPage() {
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cor do Texto Destacado (para títulos e destaques)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={formData.cores.textoDestaque || '#1F2937'}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        cores: { ...formData.cores, textoDestaque: e.target.value },
+                      })
+                    }
+                    className="w-16 h-10 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={formData.cores.textoDestaque || '#1F2937'}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        cores: { ...formData.cores, textoDestaque: e.target.value },
+                      })
+                    }
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+                    placeholder="#1F2937"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">Usado para títulos principais (text-gray-900)</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cor do Texto Terciário (para textos menores)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="color"
+                    value={formData.cores.textoTerciario || '#6B7280'}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        cores: { ...formData.cores, textoTerciario: e.target.value },
+                      })
+                    }
+                    className="w-16 h-10 border border-gray-300 rounded cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={formData.cores.textoTerciario || '#6B7280'}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        cores: { ...formData.cores, textoTerciario: e.target.value },
+                      })
+                    }
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+                    placeholder="#6B7280"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">Usado para textos secundários menores (text-gray-600)</p>
               </div>
 
               <div>

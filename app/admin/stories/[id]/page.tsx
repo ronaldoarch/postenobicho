@@ -11,9 +11,11 @@ export default function EditStoryPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
+  const [uploadingVideo, setUploadingVideo] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     image: '',
+    video: '',
     alt: '',
     active: true,
     order: 1,
@@ -32,6 +34,7 @@ export default function EditStoryPage() {
         setFormData({
           title: story.title || '',
           image: story.image || '',
+          video: story.video || '',
           alt: story.alt || '',
           active: story.active !== undefined ? story.active : true,
           order: story.order || 1,
@@ -44,8 +47,12 @@ export default function EditStoryPage() {
     }
   }
 
-  const handleFileUpload = async (file: File) => {
-    setUploadingImage(true)
+  const handleFileUpload = async (file: File, type: 'image' | 'video') => {
+    if (type === 'image') {
+      setUploadingImage(true)
+    } else {
+      setUploadingVideo(true)
+    }
 
     try {
       const uploadFormData = new FormData()
@@ -60,7 +67,11 @@ export default function EditStoryPage() {
       const data = await response.json()
 
       if (data.success) {
-        setFormData({ ...formData, image: data.url })
+        if (type === 'image') {
+          setFormData({ ...formData, image: data.url, video: '' })
+        } else {
+          setFormData({ ...formData, video: data.url, image: '' })
+        }
       } else {
         alert(data.error || 'Erro ao fazer upload')
       }
@@ -68,7 +79,11 @@ export default function EditStoryPage() {
       console.error('Erro ao fazer upload:', error)
       alert('Erro ao fazer upload do arquivo')
     } finally {
-      setUploadingImage(false)
+      if (type === 'image') {
+        setUploadingImage(false)
+      } else {
+        setUploadingVideo(false)
+      }
     }
   }
 
@@ -105,9 +120,9 @@ export default function EditStoryPage() {
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Editar Story</h1>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-md p-6 space-y-6">
-        {/* Upload de Imagem */}
+        {/* Upload de Imagem ou Vídeo */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Imagem do Story</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Mídia do Story (Imagem ou Vídeo)</label>
           <div className="space-y-4">
             {formData.image && (
               <div className="relative w-full h-64 border-2 border-gray-300 rounded-lg overflow-hidden">
@@ -126,29 +141,73 @@ export default function EditStoryPage() {
                 </button>
               </div>
             )}
-            <div>
-              <input
-                type="file"
-                id="story-image-upload"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    handleFileUpload(file)
-                  }
-                }}
-                className="hidden"
-                disabled={uploadingImage}
-              />
-              <label
-                htmlFor="story-image-upload"
-                className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer ${
-                  uploadingImage ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
-                }`}
-              >
-                {uploadingImage ? 'Enviando...' : formData.image ? 'Trocar Imagem' : 'Upload Imagem'}
-              </label>
+            {formData.video && (
+              <div className="relative w-full h-64 border-2 border-gray-300 rounded-lg overflow-hidden bg-black">
+                <video
+                  src={formData.video}
+                  controls
+                  className="w-full h-full object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, video: '' })}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center hover:bg-red-600"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            <div className="flex gap-4">
+              <div>
+                <input
+                  type="file"
+                  id="story-image-upload"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      handleFileUpload(file, 'image')
+                    }
+                  }}
+                  className="hidden"
+                  disabled={uploadingImage || uploadingVideo}
+                />
+                <label
+                  htmlFor="story-image-upload"
+                  className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer ${
+                    uploadingImage || uploadingVideo ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  {uploadingImage ? 'Enviando...' : formData.image ? 'Trocar Imagem' : 'Upload Imagem'}
+                </label>
+              </div>
+              <div>
+                <input
+                  type="file"
+                  id="story-video-upload"
+                  accept="video/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      handleFileUpload(file, 'video')
+                    }
+                  }}
+                  className="hidden"
+                  disabled={uploadingImage || uploadingVideo}
+                />
+                <label
+                  htmlFor="story-video-upload"
+                  className={`inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg cursor-pointer ${
+                    uploadingImage || uploadingVideo ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  {uploadingVideo ? 'Enviando...' : formData.video ? 'Trocar Vídeo' : 'Upload Vídeo'}
+                </label>
+              </div>
             </div>
+            <p className="text-xs text-gray-500">
+              Você pode fazer upload de uma imagem ou um vídeo. Se ambos forem enviados, apenas o último será usado.
+            </p>
           </div>
         </div>
 

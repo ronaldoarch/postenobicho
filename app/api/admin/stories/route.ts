@@ -13,8 +13,12 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const newStory = await addStory(body)
     return NextResponse.json({ story: newStory, message: 'Story criado com sucesso' })
-  } catch (error) {
-    return NextResponse.json({ error: 'Erro ao criar story' }, { status: 500 })
+  } catch (error: any) {
+    console.error('Erro ao criar story:', error)
+    return NextResponse.json({ 
+      error: 'Erro ao criar story', 
+      details: error.message 
+    }, { status: 500 })
   }
 }
 

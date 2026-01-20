@@ -7,10 +7,17 @@ import { ResultadoItem } from '@/types/resultados'
 import { formatDateLabel, toIsoDate } from '@/lib/resultados-helpers'
 
 export default function ResultsSection() {
-  const { results, loading } = useResultados()
+  const { results, loading } = useResultados({ location: 'Rio de Janeiro' })
 
   const groups = useMemo(() => {
     if (!results || results.length === 0) return []
+
+    // Filtrar apenas resultados do Rio de Janeiro
+    const resultadosRJ = results.filter((r) => (r.estado || '').toUpperCase() === 'RJ' || 
+      (r.location || '').toLowerCase().includes('rio de janeiro') ||
+      (r.location || '').toLowerCase().includes('rj'))
+
+    if (resultadosRJ.length === 0) return []
 
     const map = new Map<
       string,
@@ -23,7 +30,7 @@ export default function ResultsSection() {
       }
     >()
 
-    results.forEach((r) => {
+    resultadosRJ.forEach((r) => {
       const key = `${r.loteria || r.location || ''}|${r.drawTime || ''}|${r.date || ''}`
       const current = map.get(key) || {
         loteria: r.loteria || r.location || 'Resultado',

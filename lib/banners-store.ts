@@ -2,7 +2,14 @@ import { prisma } from './prisma'
 
 export async function getBanners() {
   return await prisma.banner.findMany({
-    where: { active: true },
+    where: { active: true, isVipBanner: false }, // Banners do carrossel (não VIP)
+    orderBy: { order: 'asc' },
+  })
+}
+
+export async function getVipBanner() {
+  return await prisma.banner.findFirst({
+    where: { active: true, isVipBanner: true }, // Banner inferior (VIP)
     orderBy: { order: 'asc' },
   })
 }
@@ -21,6 +28,7 @@ function normalizeBannerInput(banner: any, nextOrder?: number) {
   if (banner.logoImage !== undefined) data.logoImage = banner.logoImage
   if (banner.bannerImage !== undefined) data.bannerImage = banner.bannerImage
   if (banner.active !== undefined) data.active = !!banner.active
+  if (banner.isVipBanner !== undefined) data.isVipBanner = !!banner.isVipBanner
   if (banner.order !== undefined) data.order = Number(banner.order)
   if (data.order === undefined || Number.isNaN(data.order)) {
     data.order = nextOrder ?? 1

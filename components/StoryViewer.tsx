@@ -6,7 +6,8 @@ import Image from 'next/image'
 interface Story {
   id: number
   title?: string
-  image: string
+  image?: string
+  video?: string
   alt?: string
 }
 
@@ -20,8 +21,13 @@ interface StoryViewerProps {
 export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: StoryViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [progress, setProgress] = useState(0)
+  const [videoRef, setVideoRef] = useState<HTMLVideoElement | null>(null)
 
   const handleNext = () => {
+    if (videoRef) {
+      videoRef.pause()
+      setVideoRef(null)
+    }
     if (currentIndex < stories.length - 1) {
       setCurrentIndex(currentIndex + 1)
       setProgress(0)
@@ -31,6 +37,10 @@ export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: 
   }
 
   const handlePrevious = () => {
+    if (videoRef) {
+      videoRef.pause()
+      setVideoRef(null)
+    }
     if (currentIndex > 0) {
       setCurrentIndex(currentIndex - 1)
       setProgress(0)
@@ -46,6 +56,15 @@ export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: 
     setCurrentIndex(initialIndex)
     setProgress(0)
 
+    const currentStory = stories[initialIndex]
+    const isVideo = !!currentStory?.video
+
+    // Para vídeos, não usar progresso automático (o vídeo controla)
+    if (isVideo) {
+      return
+    }
+
+    // Para imagens, usar progresso automático
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
@@ -65,7 +84,7 @@ export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: 
     }, 100)
 
     return () => clearInterval(interval)
-  }, [isOpen, initialIndex, stories.length, onClose])
+  }, [isOpen, initialIndex, stories, onClose])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -141,13 +160,47 @@ export default function StoryViewer({ stories, initialIndex, isOpen, onClose }: 
 
       {/* Story atual */}
       <div className="relative w-full h-full flex items-center justify-center">
-        <Image
-          src={currentStory.image}
-          alt={currentStory.alt || currentStory.title || 'Story'}
-          fill
-          className="object-contain"
-          priority
-        />
+        {currentStory.video ? (
+          <video
+            ref={(el) => {
+              setVideoRef(el)
+              if (el) {
+                // Tentar reproduzir com áudio quando o vídeo estiver pronto
+                el.play().catch((err) => {
+                  console.log('Autoplay bloqueado, tentando com interação do usuário:', err)
+                })
+              }
+            }}
+            src={currentStory.video}
+            autoPlay
+            playsInline
+            className="w-full h-full object-contain"
+            onEnded={handleNext}
+            onLoadedData={(e) => {
+              // Tentar habilitar áudio quando o vídeo carregar
+              const video = e.currentTarget
+              video.muted = false
+              video.play().catch((err) => {
+                console.log('Reprodução bloqueada:', err)
+              })
+            }}
+            onTimeUpdate={(e) => {
+              const video = e.currentTarget
+              if (video.duration) {
+                const progressPercent = (video.currentTime / video.duration) * 100
+                setProgress(progressPercent)
+              }
+            }}
+          />
+        ) : (
+          <Image
+            src={currentStory.image || ''}
+            alt={currentStory.alt || currentStory.title || 'Story'}
+            fill
+            className="object-contain"
+            priority
+          />
+        )}
 
         {/* Área clicável esquerda (anterior) */}
         <div

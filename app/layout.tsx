@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import TemaProvider from '@/components/TemaProvider'
+import DynamicTitle from '@/components/DynamicTitle'
+import ThemeScript from '@/components/ThemeScript'
 
 export const metadata: Metadata = {
   title: 'Poste no Bicho - Acerte no Jogo do Bicho e Ganhe!',
@@ -15,13 +17,17 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <head>
+        <ThemeScript />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap" rel="stylesheet" />
         <link rel="stylesheet" href="https://code.iconify.design/3/3.1.1/iconify.min.css" />
       </head>
       <body className="antialiased">
-        <TemaProvider>{children}</TemaProvider>
+        <TemaProvider>
+          <DynamicTitle />
+          {children}
+        </TemaProvider>
       </body>
     </html>
   )

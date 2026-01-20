@@ -22,6 +22,7 @@ export default function EditBannerPage() {
     logoImage: '',
     active: true,
     order: 1,
+    isVipBanner: false,
   })
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export default function EditBannerPage() {
           logoImage: banner.logoImage || '',
           active: banner.active !== undefined ? banner.active : true,
           order: banner.order || 1,
+          isVipBanner: banner.isVipBanner !== undefined ? banner.isVipBanner : false,
         })
       }
     } catch (error) {
@@ -311,6 +313,19 @@ export default function EditBannerPage() {
           />
           <label htmlFor="active" className="ml-2 block text-sm text-gray-700">
             Banner ativo
+          </label>
+        </div>
+
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="isVipBanner"
+            checked={formData.isVipBanner}
+            onChange={(e) => setFormData({ ...formData, isVipBanner: e.target.checked })}
+            className="h-4 w-4 text-blue focus:ring-blue border-gray-300 rounded"
+          />
+          <label htmlFor="isVipBanner" className="ml-2 block text-sm text-gray-700">
+            Banner inferior (abaixo do carrossel)
           </label>
         </div>
 

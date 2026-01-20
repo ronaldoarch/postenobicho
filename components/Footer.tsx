@@ -10,9 +10,7 @@ export default function Footer() {
       <div className="flex w-full items-center justify-between lg:justify-center">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
           <a 
-            href={`https://wa.me/${configuracoes.whatsappSuporte}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/suporte"
             className="flex items-center gap-2 px-6 py-2 text-yellow-50 hover:text-yellow transition-colors"
           >
             Suporte
@@ -51,10 +49,10 @@ export default function Footer() {
                 FALE CONOSCO
               </button>
             </a>
-            <button className="flex min-h-[48px] shrink-0 cursor-pointer touch-manipulation flex-nowrap items-center justify-center gap-2 rounded-xl border border-blue-scale-100 bg-transparent px-5 py-2 text-base font-semibold text-black transition-colors duration-75 hover:border-yellow hover:bg-blue-scale-2-10 hover:text-yellow focus:border-blue-scale-100 focus:text-blue-scale-100 active:bg-blue-scale-2-10 disabled:cursor-default disabled:opacity-80">
+            <a href="/suporte" className="flex min-h-[48px] shrink-0 cursor-pointer touch-manipulation flex-nowrap items-center justify-center gap-2 rounded-xl border border-blue-scale-100 bg-transparent px-5 py-2 text-base font-semibold text-black transition-colors duration-75 hover:border-yellow hover:bg-blue-scale-2-10 hover:text-yellow focus:border-blue-scale-100 focus:text-blue-scale-100 active:bg-blue-scale-2-10 disabled:cursor-default disabled:opacity-80">
               <span className="iconify i-fluent:question-circle-32-filled" style={{ fontSize: '24px' }}></span>
               COMO JOGAR
-            </button>
+            </a>
           </div>
         </div>
       </div>

@@ -83,11 +83,20 @@ export default function StoriesSection() {
               >
                 <div className="absolute h-full w-full bg-gradient-to-br from-[#DC4CBD] via-[#D85954] to-[#EEB639] p-0.5">
                   <div className="h-full w-full overflow-hidden rounded-full bg-white">
-                    <img
-                      src={story.image}
-                      alt={story.alt || story.title || 'Story'}
-                      className="aspect-square h-full w-full scale-110 object-cover"
-                    />
+                    {story.video ? (
+                      <video
+                        src={story.video}
+                        className="aspect-square h-full w-full scale-110 object-cover"
+                        muted
+                        playsInline
+                      />
+                    ) : (
+                      <img
+                        src={story.image || ''}
+                        alt={story.alt || story.title || 'Story'}
+                        className="aspect-square h-full w-full scale-110 object-cover"
+                      />
+                    )}
                   </div>
                 </div>
               </div>

@@ -469,12 +469,18 @@ export function buscarOdd(
 
 /**
  * Calcula o multiplicador da Dezeninha baseado na quantidade de dezenas selecionadas.
+ * Regra progressiva: 3 dezenas = 15x, 4 dezenas = 150x, 5 dezenas = 1500x
+ * Para 6+ dezenas, mantém o padrão de 1500x (ou pode ser ajustado conforme regra da banca)
  */
 export function calcularMultiplicadorDezeninha(qtdDezenas: number): number {
+  if (qtdDezenas < 3 || qtdDezenas > 20) {
+    throw new Error('Dezeninha requer entre 3 e 20 dezenas')
+  }
   if (qtdDezenas === 3) return 15
   if (qtdDezenas === 4) return 150
   if (qtdDezenas === 5) return 1500
-  return 15 // Padrão para 3 dezenas
+  // Para 6 ou mais dezenas, mantém 1500x (ajustar conforme regra da banca se necessário)
+  return 1500
 }
 
 /**
@@ -926,6 +932,54 @@ export function conferirTernoDezenaEMD(
 }
 
 /**
+ * Confere um palpite de Dezeninha.
+ * Regra: precisa acertar todas as dezenas apostadas (3, 4 ou 5 dezenas).
+ * 
+ * @param resultado Lista de milhares sorteadas
+ * @param dezenasApostadas String com dezenas apostadas (ex: "12,23,34" ou "12,23,34,45" ou "12,23,34,45,56")
+ * @param pos_from Primeira posição (1-indexed)
+ * @param pos_to Última posição (1-indexed)
+ */
+export function conferirDezeninha(
+  resultado: number[],
+  dezenasApostadas: string,
+  pos_from: number,
+  pos_to: number
+): PrizeCalculation {
+  // Parsear dezenas apostadas
+  const dezenasApostadasArray = dezenasApostadas
+    .split(/[,\s]+/)
+    .map(d => parseInt(d.trim(), 10))
+    .filter(d => !isNaN(d) && d >= 0 && d <= 99)
+  
+  if (dezenasApostadasArray.length < 3 || dezenasApostadasArray.length > 20) {
+    throw new Error('Dezeninha requer entre 3 e 20 dezenas')
+  }
+  
+  const dezenasApostadasSet = new Set(dezenasApostadasArray)
+  const dezenasEncontradas = new Set<number>()
+  
+  // Verificar cada prêmio no intervalo
+  for (let pos = pos_from - 1; pos < pos_to && pos < resultado.length; pos++) {
+    const premio = resultado[pos]
+    const dezena = premio % 100 // Últimos 2 dígitos
+    
+    if (dezenasApostadasSet.has(dezena)) {
+      dezenasEncontradas.add(dezena)
+    }
+  }
+  
+  // Acertou se encontrou todas as dezenas apostadas
+  const hits = dezenasEncontradas.size === dezenasApostadasSet.size ? 1 : 0
+  
+  return {
+    hits,
+    prizePerUnit: 0,
+    totalPrize: 0,
+  }
+}
+
+/**
  * Confere um palpite de passe (1º → 2º).
  */
 export function conferirPasse(
@@ -1088,6 +1142,13 @@ export function conferirPalpite(
     }
     calculation = calcularNumero(modalidade, palpite.numero, pos_from, pos_to, valorPorPalpite)
     prize = conferirTernoDezenaEMD(resultado.prizes, palpite.numero, pos_from, pos_to)
+  } else if (modalidade === 'DEZENINHA') {
+    // Dezeninha: precisa acertar todas as dezenas apostadas (3 a 20 dezenas)
+    if (!palpite.numero) {
+      throw new Error('Dezeninha requer números de dezenas')
+    }
+    calculation = calcularNumero(modalidade, palpite.numero, pos_from, pos_to, valorPorPalpite)
+    prize = conferirDezeninha(resultado.prizes, palpite.numero, pos_from, pos_to)
   } else {
     // Modalidade de número
     if (!palpite.numero) {
@@ -1102,7 +1163,9 @@ export function conferirPalpite(
   
   // Ajustar odd para Dezeninha baseado na quantidade de dezenas
   if (modalidade === 'DEZENINHA' && palpite.numero) {
-    const qtdDezenas = palpite.numero.length / 2 // Assumindo formato de string de dezenas
+    // Contar dezenas separadas por vírgula ou espaço
+    const dezenasArray = palpite.numero.split(/[,\s]+/).filter(d => d.trim().length > 0)
+    const qtdDezenas = dezenasArray.length
     odd = calcularMultiplicadorDezeninha(qtdDezenas)
   }
   

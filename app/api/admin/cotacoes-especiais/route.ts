@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { tipo, numero, ativo = true } = body
+    const { tipo, numero, cotacao, ativo = true } = body
 
     if (!tipo || !numero) {
       return NextResponse.json(
@@ -81,17 +81,23 @@ export async function POST(request: NextRequest) {
         ? numero.padStart(4, '0')
         : numero.padStart(3, '0')
 
-    const cotacao = await prisma.cotacaoEspecial.create({
-      data: {
-        tipo,
-        numero: numeroFormatado,
-        ativo: Boolean(ativo),
-      },
+    const cotacaoData: any = {
+      tipo,
+      numero: numeroFormatado,
+      ativo: Boolean(ativo),
+    }
+
+    if (cotacao !== undefined && cotacao !== null) {
+      cotacaoData.cotacao = parseFloat(cotacao)
+    }
+
+    const cotacaoCreated = await prisma.cotacaoEspecial.create({
+      data: cotacaoData,
     })
 
     return NextResponse.json({
       message: 'Cotação especial criada com sucesso',
-      cotacao,
+      cotacao: cotacaoCreated,
     })
   } catch (error: any) {
     console.error('Erro ao criar cotação especial:', error)
@@ -160,23 +166,38 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, ativo } = body
+    const { id, ativo, cotacao } = body
 
-    if (!id || ativo === undefined) {
+    if (!id) {
       return NextResponse.json(
-        { error: 'Campos obrigatórios: id, ativo' },
+        { error: 'Campo obrigatório: id' },
         { status: 400 }
       )
     }
 
-    const cotacao = await prisma.cotacaoEspecial.update({
+    const updateData: any = {}
+    if (ativo !== undefined) {
+      updateData.ativo = Boolean(ativo)
+    }
+    if (cotacao !== undefined) {
+      updateData.cotacao = cotacao === null || cotacao === '' ? null : parseFloat(cotacao)
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: 'Nenhum campo para atualizar' },
+        { status: 400 }
+      )
+    }
+
+    const cotacaoUpdated = await prisma.cotacaoEspecial.update({
       where: { id: Number(id) },
-      data: { ativo: Boolean(ativo) },
+      data: updateData,
     })
 
     return NextResponse.json({
       message: 'Cotação especial atualizada com sucesso',
-      cotacao,
+      cotacao: cotacaoUpdated,
     })
   } catch (error) {
     console.error('Erro ao atualizar cotação especial:', error)

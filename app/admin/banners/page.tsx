@@ -15,6 +15,7 @@ interface Banner {
   logoImage?: string
   active: boolean
   order: number
+  isVipBanner: boolean
 }
 
 export default function BannersPage() {
@@ -86,6 +87,7 @@ export default function BannersPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Badge</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Título</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ordem</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
             </tr>
@@ -93,7 +95,7 @@ export default function BannersPage() {
           <tbody className="divide-y divide-gray-200">
             {banners.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={8} className="px-6 py-4 text-center text-gray-500">
                   Nenhum banner cadastrado
                 </td>
               </tr>
@@ -129,6 +131,15 @@ export default function BannersPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{banner.badge}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{banner.title}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{banner.order}</td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                      banner.isVipBanner
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {banner.isVipBanner ? 'Banner Inferior' : 'Carrossel'}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
                       onClick={() => toggleActive(banner.id, banner.active)}

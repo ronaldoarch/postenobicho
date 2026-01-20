@@ -19,6 +19,7 @@ export default function NewBannerPage() {
     logoImage: '',
     active: true,
     order: 1,
+    isVipBanner: false,
   })
 
   const handleFileUpload = async (file: File, type: 'banner' | 'logo') => {
@@ -274,6 +275,19 @@ export default function NewBannerPage() {
           />
           <label htmlFor="active" className="ml-2 block text-sm text-gray-700">
             Banner ativo
+          </label>
+        </div>
+
+        <div className="flex items-center">
+          <input
+            type="checkbox"
+            id="isVipBanner"
+            checked={formData.isVipBanner}
+            onChange={(e) => setFormData({ ...formData, isVipBanner: e.target.checked })}
+            className="h-4 w-4 text-blue focus:ring-blue border-gray-300 rounded"
+          />
+          <label htmlFor="isVipBanner" className="ml-2 block text-sm text-gray-700">
+            Banner inferior (abaixo do carrossel)
           </label>
         </div>
 

@@ -19,7 +19,8 @@ export function useResultados(initialOptions?: UseResultadosOptions) {
       try {
         const params = new URLSearchParams()
         const date = options?.date ?? initialOptions?.date
-        const location = options?.location ?? initialOptions?.location
+        // Por padrão, buscar apenas resultados do Rio de Janeiro
+        const location = options?.location ?? initialOptions?.location ?? 'Rio de Janeiro'
         if (date) params.set('date', date)
         if (location) params.set('location', location)
 

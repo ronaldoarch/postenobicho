@@ -8,15 +8,22 @@ interface Configuracoes {
   emailSuporte: string
   whatsappSuporte: string
   logoSite: string
+  liquidacaoAutomatica?: boolean
 }
 
 export function useConfiguracoes() {
+  // Usar valor do window se disponível (carregado pelo script no servidor)
+  const nomePlataformaInicial = typeof window !== 'undefined' && (window as any).__NOME_PLATAFORMA__ 
+    ? (window as any).__NOME_PLATAFORMA__ 
+    : 'Poste no Bicho'
+  
   const [configuracoes, setConfiguracoes] = useState<Configuracoes>({
-    nomePlataforma: 'Lot Bicho',
+    nomePlataforma: nomePlataformaInicial,
     numeroSuporte: '(00) 00000-0000',
-    emailSuporte: 'suporte@lotbicho.com',
+    emailSuporte: 'suporte@postenobicho.com',
     whatsappSuporte: '5500000000000',
     logoSite: '',
+    liquidacaoAutomatica: true,
   })
   const [loading, setLoading] = useState(true)
 

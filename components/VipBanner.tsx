@@ -15,13 +15,10 @@ export default function VipBanner() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch(`/api/banners?t=${Date.now()}`, { cache: 'no-store' })
+        const res = await fetch(`/api/banners/vip?t=${Date.now()}`, { cache: 'no-store' })
         const data = await res.json()
-        if (data?.banners?.length) {
-          // Escolhe o primeiro ativo com imagem
-          const selected =
-            data.banners.find((b: BannerItem) => b.active !== false && b.bannerImage) || data.banners[0]
-          setBanner(selected || null)
+        if (data?.banner) {
+          setBanner(data.banner)
         } else {
           setBanner(null)
         }

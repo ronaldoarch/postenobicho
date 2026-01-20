@@ -1,23 +1,40 @@
 import { prisma } from './prisma'
 
 export async function getConfiguracoes() {
-  let config = await prisma.configuracao.findFirst()
-  
-  if (!config) {
-    // Criar configuração padrão se não existir
-    config = await prisma.configuracao.create({
-      data: {
-        nomePlataforma: 'Poste no Bicho',
-        numeroSuporte: '(00) 00000-0000',
-        emailSuporte: 'suporte@postenobicho.com',
-        whatsappSuporte: '5500000000000',
-        logoSite: '',
-        liquidacaoAutomatica: true,
-      },
-    })
+  try {
+    let config = await prisma.configuracao.findFirst()
+    
+    if (!config) {
+      // Criar configuração padrão se não existir
+      config = await prisma.configuracao.create({
+        data: {
+          nomePlataforma: 'Poste no Bicho',
+          numeroSuporte: '(00) 00000-0000',
+          emailSuporte: 'suporte@postenobicho.com',
+          whatsappSuporte: '5500000000000',
+          logoSite: '',
+          liquidacaoAutomatica: true,
+        },
+      })
+    }
+    
+    return config
+  } catch (error) {
+    console.error('Erro ao buscar configurações:', error)
+    // Retornar configuração padrão em caso de erro
+    // Usar 'as any' porque não temos acesso ao tipo Prisma em caso de erro
+    return {
+      id: 1,
+      nomePlataforma: 'Poste no Bicho',
+      numeroSuporte: '(00) 00000-0000',
+      emailSuporte: 'suporte@postenobicho.com',
+      whatsappSuporte: '5500000000000',
+      logoSite: '',
+      liquidacaoAutomatica: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as any
   }
-  
-  return config
 }
 
 function normalizeConfiguracoes(updates: any) {

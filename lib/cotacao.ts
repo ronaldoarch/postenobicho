@@ -5,11 +5,12 @@
 import { prisma } from './prisma'
 
 /**
- * Verifica se uma milhar está cotada
+ * Verifica se uma milhar está cotada e retorna a cotação
  */
-export async function verificarMilharCotada(milhar: string): Promise<boolean> {
+export async function verificarMilharCotada(milhar: string | number): Promise<{ cotada: boolean; cotacao: number | null }> {
   try {
-    const milharFormatada = milhar.padStart(4, '0')
+    const milharStr = typeof milhar === 'number' ? milhar.toString().padStart(4, '0') : milhar.padStart(4, '0')
+    const milharFormatada = milharStr.slice(-4)
     const cotacao = await prisma.cotacaoEspecial.findFirst({
       where: {
         tipo: 'milhar',
@@ -17,19 +18,23 @@ export async function verificarMilharCotada(milhar: string): Promise<boolean> {
         ativo: true,
       },
     })
-    return !!cotacao
+    return {
+      cotada: !!cotacao,
+      cotacao: cotacao?.cotacao ?? null,
+    }
   } catch (error) {
     console.error('Erro ao verificar milhar cotada:', error)
-    return false
+    return { cotada: false, cotacao: null }
   }
 }
 
 /**
- * Verifica se uma centena está cotada
+ * Verifica se uma centena está cotada e retorna a cotação
  */
-export async function verificarCentenaCotada(centena: string): Promise<boolean> {
+export async function verificarCentenaCotada(centena: string | number): Promise<{ cotada: boolean; cotacao: number | null }> {
   try {
-    const centenaFormatada = centena.padStart(3, '0')
+    const centenaStr = typeof centena === 'number' ? centena.toString().padStart(3, '0') : centena.padStart(3, '0')
+    const centenaFormatada = centenaStr.slice(-3)
     const cotacao = await prisma.cotacaoEspecial.findFirst({
       where: {
         tipo: 'centena',
@@ -37,10 +42,13 @@ export async function verificarCentenaCotada(centena: string): Promise<boolean> 
         ativo: true,
       },
     })
-    return !!cotacao
+    return {
+      cotada: !!cotacao,
+      cotacao: cotacao?.cotacao ?? null,
+    }
   } catch (error) {
     console.error('Erro ao verificar centena cotada:', error)
-    return false
+    return { cotada: false, cotacao: null }
   }
 }
 

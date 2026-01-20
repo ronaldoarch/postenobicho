@@ -63,7 +63,7 @@ export default function HeroBanner() {
   }
 
   return (
-    <div className="relative w-full overflow-hidden">
+    <div className="relative w-full overflow-visible">
       <Swiper
         modules={[Autoplay, Pagination]}
         autoplay={{
@@ -77,54 +77,91 @@ export default function HeroBanner() {
         }}
         loop={banners.length > 1}
         className="hero-banner-swiper"
+        autoHeight={true}
       >
         {banners.map((banner) => (
           <SwiperSlide key={banner.id}>
-            <div
-              className="relative w-full overflow-hidden min-h-[400px] lg:min-h-[500px]"
-              style={{
-                backgroundImage: banner.bannerImage
-                  ? `url(${banner.bannerImage})`
-                  : 'repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,.1) 35px, rgba(255,255,255,.1) 70px), linear-gradient(to bottom right, #fbbf24, #f59e0b, #fbbf24)',
-                backgroundSize: banner.bannerImage ? 'cover' : 'auto',
-                backgroundPosition: banner.bannerImage ? 'center center' : 'auto',
-                backgroundRepeat: 'no-repeat',
-              }}
-            >
-              {/* Se houver imagem de banner, mostra apenas a imagem sem elementos decorativos */}
-              {!banner.bannerImage && (
-                // Banner sem imagem - mostra conteúdo padrão
-                <>
-                  {/* Overlay escuro para melhorar legibilidade do texto quando há imagem */}
-                  <div className="absolute inset-0 bg-black/20 z-0"></div>
-                  
-                  {/* Conteúdo do Banner */}
-                  <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between px-4 py-8 lg:px-12 lg:py-16">
-                    {/* Lado Esquerdo */}
-                    <div className="flex flex-col items-start gap-6 lg:w-1/2">
+            {banner.bannerImage ? (
+              <div className="relative w-full flex items-center justify-center overflow-visible">
+                <img
+                  src={banner.bannerImage}
+                  alt={banner.title || 'Banner'}
+                  className="w-full h-auto object-contain max-w-full"
+                  style={{
+                    display: 'block',
+                  }}
+                  onError={(e) => {
+                    console.error('Erro ao carregar banner:', e);
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                className="relative w-full overflow-visible min-h-[400px] lg:min-h-[500px]"
+                style={{
+                  backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 35px, rgba(255,255,255,.1) 35px, rgba(255,255,255,.1) 70px), linear-gradient(to bottom right, #fbbf24, #f59e0b, #fbbf24)',
+                  backgroundSize: 'auto',
+                  backgroundPosition: 'auto',
+                  backgroundRepeat: 'no-repeat',
+                  paddingBottom: '80px', // Espaço extra para o logo ultrapassar
+                }}
+              >
+                {/* Overlay escuro para melhorar legibilidade do texto quando há imagem */}
+                <div className="absolute inset-0 bg-black/20 z-0"></div>
+                
+                {/* Conteúdo do Banner */}
+                <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between px-4 py-8 lg:px-12 lg:py-16">
+                  {/* Lado Esquerdo */}
+                  <div className="flex flex-col items-start gap-6 lg:w-1/2">
                       <div className="relative">
                         <div className="absolute -top-2 -left-2 bg-red-600 text-white px-3 py-1 rounded-lg transform -rotate-2 text-sm font-bold">
                           {banner.badge}
                         </div>
-                        <div className="flex items-center gap-3 mt-8">
+                        <div className="relative flex items-end gap-3 mt-8 mb-8 lg:mb-12">
                           {banner.logoImage ? (
-                            <img
-                              src={banner.logoImage}
-                              alt={configuracoes.nomePlataforma}
-                              className="h-12 w-auto lg:h-16"
-                              onError={(e) => {
-                                // Se a imagem falhar ao carregar, esconde e mostra o emoji
-                                e.currentTarget.style.display = 'none';
-                                const fallback = document.createElement('span');
-                                fallback.className = 'text-4xl';
-                                fallback.textContent = '🦁';
-                                e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
+                            <div 
+                              className="relative z-30"
+                              style={{
+                                transform: 'perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px)',
+                                filter: 'drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3)) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2))',
+                                transformStyle: 'preserve-3d',
                               }}
-                            />
+                            >
+                              <img
+                                src={banner.logoImage}
+                                alt={configuracoes.nomePlataforma}
+                                className="h-40 w-auto lg:h-72 xl:h-80 2xl:h-96 transform transition-all duration-300 hover:scale-110"
+                                style={{
+                                  marginBottom: '-80px',
+                                  position: 'relative',
+                                  zIndex: 30,
+                                  transform: 'translateZ(50px)',
+                                }}
+                                onError={(e) => {
+                                  // Se a imagem falhar ao carregar, esconde e mostra o emoji
+                                  e.currentTarget.style.display = 'none';
+                                  const fallback = document.createElement('span');
+                                  fallback.className = 'text-8xl lg:text-[12rem] xl:text-[14rem] 2xl:text-[16rem]';
+                                  fallback.style.cssText = 'margin-bottom: -80px; position: relative; z-index: 30; filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)); transform: perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px);';
+                                  fallback.textContent = '🦁';
+                                  e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
+                                }}
+                              />
+                            </div>
                           ) : (
-                            <span className="text-4xl">🦁</span>
+                            <span 
+                              className="text-8xl lg:text-[12rem] xl:text-[14rem] 2xl:text-[16rem] relative z-30 block"
+                              style={{ 
+                                marginBottom: '-80px',
+                                filter: 'drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))',
+                                transform: 'perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px)',
+                                transformStyle: 'preserve-3d',
+                              }}
+                            >
+                              🦁
+                            </span>
                           )}
-                          <span className="text-3xl font-bold text-blue lg:text-4xl">{configuracoes.nomePlataforma}</span>
+                          <span className="text-3xl font-bold text-blue lg:text-4xl relative z-30 mb-4">{configuracoes.nomePlataforma}</span>
                         </div>
                       </div>
 
@@ -149,10 +186,10 @@ export default function HeroBanner() {
                           {banner.bonus}
                         </div>
                       </div>
-                    </div>
+                  </div>
 
-                    {/* Lado Direito - Mascote e Celular */}
-                    <div className="relative lg:w-1/2 flex justify-center items-center mt-8 lg:mt-0">
+                  {/* Lado Direito - Mascote e Celular */}
+                  <div className="relative lg:w-1/2 flex justify-center items-center mt-8 lg:mt-0">
                       <div className="relative">
                         {/* Mascote Leão - Placeholder */}
                         <div className="relative z-10">
@@ -192,15 +229,24 @@ export default function HeroBanner() {
                   <div className="absolute bottom-4 right-4 lg:right-12 text-xs text-white drop-shadow-lg z-10">
                     *Confira as regras.
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+            )}
           </SwiperSlide>
         ))}
       </Swiper>
 
-      {/* Estilos customizados para paginação */}
+      {/* Estilos customizados para paginação e evitar cortes */}
       <style jsx global>{`
+        .hero-banner-swiper {
+          overflow: visible !important;
+        }
+        .hero-banner-swiper .swiper-wrapper {
+          overflow: visible !important;
+        }
+        .hero-banner-swiper .swiper-slide {
+          overflow: visible !important;
+          height: auto !important;
+        }
         .hero-banner-swiper .swiper-pagination {
           bottom: 20px !important;
           left: 50% !important;

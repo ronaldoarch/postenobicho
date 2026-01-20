@@ -9,6 +9,16 @@ export async function GET() {
     return NextResponse.json({ configuracoes })
   } catch (error) {
     console.error('Erro ao buscar configurações:', error)
-    return NextResponse.json({ configuracoes: null }, { status: 500 })
+    // Retornar configuração padrão em caso de erro ao invés de 500
+    return NextResponse.json({
+      configuracoes: {
+        nomePlataforma: 'Poste no Bicho',
+        numeroSuporte: '(00) 00000-0000',
+        emailSuporte: 'suporte@postenobicho.com',
+        whatsappSuporte: '5500000000000',
+        logoSite: '',
+        liquidacaoAutomatica: true,
+      },
+    })
   }
 }

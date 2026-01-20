@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+import { parseSessionToken } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -12,6 +14,16 @@ export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Verificar autenticação
+  const session = cookies().get('lotbicho_session')?.value
+  const user = parseSessionToken(session)
+
+  if (!user) {
+    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  }
+
+  // TODO: Verificar se usuário é admin
+
   try {
     const userId = parseInt(params.id)
 

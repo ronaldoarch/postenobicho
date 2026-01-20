@@ -1,3 +1,5 @@
+'use client'
+
 import Header from '@/components/Header'
 import HeroBanner from '@/components/HeroBanner'
 import StoriesSection from '@/components/StoriesSection'
@@ -7,8 +9,11 @@ import VipBanner from '@/components/VipBanner'
 import FAQSection from '@/components/FAQSection'
 import Footer from '@/components/Footer'
 import BottomNav from '@/components/BottomNav'
+import { useConfiguracoes } from '@/hooks/useConfiguracoes'
 
 export default function Home() {
+  const { configuracoes } = useConfiguracoes()
+  
   return (
     <div className="flex min-h-screen flex-col bg-gray-scale-100">
       <Header />
@@ -16,7 +21,7 @@ export default function Home() {
         <h1 className="sr-only">Jogo do Bicho</h1>
         <div className="mx-auto flex w-full max-w-[1286px] flex-col gap-4 pt-4 md:gap-6 md:pt-6 lg:gap-8 lg:pt-8 xl:py-6">
           {/* Banner Principal */}
-          <div className="w-full overflow-hidden xl:rounded-xl">
+          <div className="w-full overflow-visible xl:rounded-xl">
             <HeroBanner />
           </div>
 
@@ -38,10 +43,10 @@ export default function Home() {
           {/* Informações sobre o Jogo */}
           <section className="flex flex-col gap-10 p-8">
             <div className="flex w-full justify-center gap-4 lg:justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-4xl">🦁</span>
-                <span className="text-3xl font-bold text-gray-950 lg:text-4xl">Poste no Bicho</span>
-              </div>
+            <div className="flex items-center gap-3">
+              <span className="text-4xl">🦁</span>
+              <span className="text-3xl font-bold text-gray-950 lg:text-4xl">{configuracoes.nomePlataforma}</span>
+            </div>
               <div className="hidden items-center gap-8 lg:flex">
                 <a href="/suporte">
                   <button className="flex min-h-[48px] shrink-0 cursor-pointer touch-manipulation flex-nowrap items-center justify-center gap-2 rounded-xl border border-blue-scale-100 bg-transparent px-5 py-2 text-base font-semibold text-black transition-colors duration-75 hover:border-yellow hover:bg-blue-scale-2-10 hover:text-yellow focus:border-blue-scale-100 focus:text-blue-scale-100 active:bg-blue-scale-2-10 disabled:cursor-default disabled:opacity-80">

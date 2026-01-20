@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import AlertaBonito from '@/components/AlertaBonito'
+import { useAlerta } from '@/hooks/useAlerta'
 
 // Página de gerenciamento de descarga/controle de banca
 
@@ -44,7 +46,23 @@ const MODALIDADES = [
   'Terno de Grupo Seco',
 ]
 
+interface ApostaDescarga {
+  id: number
+  valor: number
+  palpite: string
+  data: string | Date
+  horario: string | null
+  loteria: string | null
+  usuario: {
+    id: number
+    nome: string | null
+    email: string
+  } | null
+  posicao: string
+}
+
 export default function DescargaPage() {
+  const { alerta, sucesso, erro, fecharAlerta } = useAlerta()
   const [limites, setLimites] = useState<LimiteDescarga[]>([])
   const [alertas, setAlertas] = useState<AlertaDescarga[]>([])
   const [loading, setLoading] = useState(true)
@@ -54,6 +72,9 @@ export default function DescargaPage() {
     premio: 1,
     limite: 0,
   })
+  const [apostasPorLimite, setApostasPorLimite] = useState<Record<string, ApostaDescarga[]>>({})
+  const [limiteExpandido, setLimiteExpandido] = useState<string | null>(null)
+  const [carregandoApostas, setCarregandoApostas] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -98,17 +119,17 @@ export default function DescargaPage() {
       })
 
       if (response.ok) {
-        alert('Limite definido com sucesso!')
+        sucesso('Limite Definido', 'Limite de descarga definido com sucesso!')
         setShowForm(false)
         setFormData({ modalidade: '', premio: 1, limite: 0 })
         loadData()
       } else {
         const error = await response.json()
-        alert(`Erro: ${error.error || 'Erro ao definir limite'}`)
+        erro('Erro ao Definir Limite', error.error || 'Erro ao definir limite')
       }
     } catch (error) {
       console.error('Erro ao salvar limite:', error)
-      alert('Erro ao salvar limite')
+      erro('Erro ao Salvar', 'Erro ao salvar limite')
     }
   }
 
@@ -122,14 +143,14 @@ export default function DescargaPage() {
       })
 
       if (response.ok) {
-        alert('Alerta resolvido!')
+        sucesso('Alerta Resolvido', 'O alerta foi marcado como resolvido!')
         loadData()
       } else {
-        alert('Erro ao resolver alerta')
+        erro('Erro ao Resolver', 'Não foi possível resolver o alerta')
       }
     } catch (error) {
       console.error('Erro ao resolver alerta:', error)
-      alert('Erro ao resolver alerta')
+      erro('Erro ao Resolver', 'Ocorreu um erro ao resolver o alerta')
     }
   }
 
@@ -158,8 +179,58 @@ export default function DescargaPage() {
     }
   }
 
-  const exportarPDF = () => {
+  const carregarApostas = async (limite: LimiteDescarga) => {
+    const key = `${limite.modalidade}_${limite.premio}`
+    
+    // Se já carregou, apenas expandir/colapsar
+    if (apostasPorLimite[key]) {
+      setLimiteExpandido(limiteExpandido === key ? null : key)
+      return
+    }
+
+    // Carregar apostas
+    setCarregandoApostas(key)
+    try {
+      const res = await fetch(`/api/admin/descarga?action=apostas&modalidade=${encodeURIComponent(limite.modalidade)}&premio=${limite.premio}`, {
+        credentials: 'include',
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        setApostasPorLimite(prev => ({
+          ...prev,
+          [key]: data.apostas || [],
+        }))
+        setLimiteExpandido(key)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar apostas:', error)
+      erro('Erro', 'Erro ao carregar apostas')
+    } finally {
+      setCarregandoApostas(null)
+    }
+  }
+
+  const exportarPDF = async () => {
     const dataAtual = new Date().toLocaleString('pt-BR')
+    
+    // Buscar apostas para cada limite ativo
+    const apostasPorLimite: Record<string, any[]> = {}
+    
+    for (const limite of limites.filter(l => l.ativo)) {
+      try {
+        const res = await fetch(`/api/admin/descarga?action=apostas&modalidade=${encodeURIComponent(limite.modalidade)}&premio=${limite.premio}`, {
+          credentials: 'include',
+        })
+        if (res.ok) {
+          const data = await res.json()
+          const key = `${limite.modalidade}_${limite.premio}`
+          apostasPorLimite[key] = data.apostas || []
+        }
+      } catch (error) {
+        console.error(`Erro ao buscar apostas para ${limite.modalidade} - ${limite.premio}º:`, error)
+      }
+    }
     
     // Criar conteúdo HTML para o PDF
     let htmlContent = `
@@ -296,6 +367,60 @@ export default function DescargaPage() {
           </tbody>
         </table>
     `
+
+    // Adicionar detalhamento de apostas por limite
+    for (const limite of limites.filter(l => l.ativo)) {
+      const key = `${limite.modalidade}_${limite.premio}`
+      const apostas = apostasPorLimite[key] || []
+      
+      if (apostas.length > 0) {
+        const valorTotal = apostas.reduce((sum, a) => sum + a.valor, 0)
+        
+        htmlContent += `
+          <h2>${limite.modalidade} - ${limite.premio}º Prêmio</h2>
+          <div class="info">
+            <strong>Limite:</strong> R$ ${limite.limite.toFixed(2)} | 
+            <strong>Total Apostado:</strong> R$ ${valorTotal.toFixed(2)} | 
+            <strong>Quantidade de Apostas:</strong> ${apostas.length}
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Horário</th>
+                <th>Palpite</th>
+                <th>Prêmio</th>
+                <th>Valor (R$)</th>
+                <th>Usuário</th>
+              </tr>
+            </thead>
+            <tbody>
+        `
+        
+        apostas.forEach((aposta) => {
+          const dataAposta = new Date(aposta.data).toLocaleDateString('pt-BR')
+          const horaAposta = aposta.horario || '—'
+          const palpite = aposta.palpite || '—'
+          const posicao = aposta.posicao || '—'
+          
+          htmlContent += `
+              <tr>
+                <td>${dataAposta}</td>
+                <td>${horaAposta}</td>
+                <td>${palpite}</td>
+                <td>${posicao}</td>
+                <td class="valor">R$ ${aposta.valor.toFixed(2)}</td>
+                <td>${aposta.usuario?.nome || aposta.usuario?.email || '—'}</td>
+              </tr>
+          `
+        })
+        
+        htmlContent += `
+            </tbody>
+          </table>
+        `
+      }
+    }
 
     // Adicionar alertas se houver
     const alertasAtivos = alertas.filter((a) => !a.resolvido)
@@ -532,6 +657,9 @@ export default function DescargaPage() {
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Total Apostado
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Ações
                 </th>
               </tr>
@@ -539,56 +667,141 @@ export default function DescargaPage() {
             <tbody className="divide-y divide-gray-200">
               {limites.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
                     Nenhum limite cadastrado. Clique em "Novo Limite" para criar um.
                   </td>
                 </tr>
               ) : (
-                limites.map((limite) => (
-                  <tr key={limite.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {limite.modalidade}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {limite.premio}º Prêmio
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      R$ {limite.limite.toFixed(2)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => toggleLimite(limite.id, limite.ativo)}
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          limite.ativo
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {limite.ativo ? 'Ativo' : 'Inativo'}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => {
-                          setFormData({
-                            modalidade: limite.modalidade,
-                            premio: limite.premio,
-                            limite: limite.limite,
-                          })
-                          setShowForm(true)
-                        }}
-                        className="text-blue hover:text-blue-700"
-                      >
-                        Editar
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                limites.map((limite) => {
+                  const key = `${limite.modalidade}_${limite.premio}`
+                  const apostas = apostasPorLimite[key] || []
+                  const totalApostado = apostas.reduce((sum, a) => sum + a.valor, 0)
+                  const estaExpandido = limiteExpandido === key
+                  
+                  return (
+                    <>
+                      <tr key={limite.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {limite.modalidade}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {limite.premio}º Prêmio
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          R$ {limite.limite.toFixed(2)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => toggleLimite(limite.id, limite.ativo)}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              limite.ativo
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {limite.ativo ? 'Ativo' : 'Inativo'}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => carregarApostas(limite)}
+                            className="text-blue hover:text-blue-700 flex items-center gap-1"
+                            disabled={carregandoApostas === key}
+                          >
+                            {carregandoApostas === key ? (
+                              <>Carregando...</>
+                            ) : (
+                              <>
+                                {estaExpandido ? 'Ocultar' : 'Ver'} Apostas
+                                {apostas.length > 0 && ` (${apostas.length})`}
+                                {totalApostado > 0 && ` - R$ ${totalApostado.toFixed(2)}`}
+                              </>
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => {
+                              setFormData({
+                                modalidade: limite.modalidade,
+                                premio: limite.premio,
+                                limite: limite.limite,
+                              })
+                              setShowForm(true)
+                            }}
+                            className="text-blue hover:text-blue-700"
+                          >
+                            Editar
+                          </button>
+                        </td>
+                      </tr>
+                      {estaExpandido && apostas.length > 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                            <div className="mt-2">
+                              <h4 className="font-semibold text-gray-900 mb-3">
+                                Apostas - Total: R$ {totalApostado.toFixed(2)} ({apostas.length} aposta{apostas.length !== 1 ? 's' : ''})
+                              </h4>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-gray-100">
+                                    <tr>
+                                      <th className="px-3 py-2 text-left">Data</th>
+                                      <th className="px-3 py-2 text-left">Horário</th>
+                                      <th className="px-3 py-2 text-left">Palpite</th>
+                                      <th className="px-3 py-2 text-left">Prêmio</th>
+                                      <th className="px-3 py-2 text-left">Valor</th>
+                                      <th className="px-3 py-2 text-left">Usuário</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-200">
+                                    {apostas.map((aposta) => (
+                                      <tr key={aposta.id} className="hover:bg-white">
+                                        <td className="px-3 py-2">
+                                          {new Date(aposta.data).toLocaleDateString('pt-BR')}
+                                        </td>
+                                        <td className="px-3 py-2">{aposta.horario || '—'}</td>
+                                        <td className="px-3 py-2 font-mono text-xs">{aposta.palpite || '—'}</td>
+                                        <td className="px-3 py-2">{aposta.posicao || '—'}</td>
+                                        <td className="px-3 py-2 font-semibold">R$ {aposta.valor.toFixed(2)}</td>
+                                        <td className="px-3 py-2 text-xs">
+                                          {aposta.usuario?.nome || aposta.usuario?.email || '—'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {estaExpandido && apostas.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-6 py-4 bg-gray-50 text-center text-gray-500">
+                            Nenhuma aposta encontrada para este limite
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  )
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Alerta bonito */}
+      {alerta && (
+        <AlertaBonito
+          isOpen={!!alerta}
+          onClose={fecharAlerta}
+          tipo={alerta.tipo}
+          titulo={alerta.titulo}
+          mensagem={alerta.mensagem}
+        />
+      )}
     </div>
   )
 }

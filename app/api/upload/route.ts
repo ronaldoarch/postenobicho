@@ -16,15 +16,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Validar tipo de arquivo
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
+    const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo']
+    const allowedTypes = [...allowedImageTypes, ...allowedVideoTypes]
+    
     if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json({ error: 'Tipo de arquivo não permitido' }, { status: 400 })
+      return NextResponse.json({ error: 'Tipo de arquivo não permitido. Use imagens (JPG, PNG, WEBP, GIF) ou vídeos (MP4, WEBM, MOV, AVI)' }, { status: 400 })
     }
 
-    // Validar tamanho (max 5MB)
-    const maxSize = 5 * 1024 * 1024 // 5MB
+    // Validar tamanho (max 50MB para vídeos, 5MB para imagens)
+    const isVideo = allowedVideoTypes.includes(file.type)
+    const maxSize = isVideo ? 50 * 1024 * 1024 : 5 * 1024 * 1024 // 50MB para vídeos, 5MB para imagens
     if (file.size > maxSize) {
-      return NextResponse.json({ error: 'Arquivo muito grande (máximo 5MB)' }, { status: 400 })
+      return NextResponse.json({ 
+        error: isVideo 
+          ? 'Vídeo muito grande (máximo 50MB)' 
+          : 'Imagem muito grande (máximo 5MB)' 
+      }, { status: 400 })
     }
 
     // Determinar diretório baseado no tipo
@@ -32,7 +40,7 @@ export async function POST(request: NextRequest) {
     if (type === 'logo') {
       uploadDir = 'logos'
     } else if (type === 'story') {
-      uploadDir = 'stories'
+      uploadDir = isVideo ? 'stories/videos' : 'stories'
     }
     const uploadPath = join(process.cwd(), 'public', 'uploads', uploadDir)
 

@@ -19,6 +19,7 @@ model Banner {
   bannerImage String?
   active      Boolean  @default(true)
   order       Int      @default(0)
+  isVipBanner Boolean  @default(false) // Banner inferior (abaixo do carrossel)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -26,7 +27,8 @@ model Banner {
 model Story {
   id        Int      @id @default(autoincrement())
   title     String?  @default("")
-  image     String
+  image     String?
+  video     String?
   alt       String?  @default("")
   active    Boolean  @default(true)
   order     Int      @default(0)
@@ -42,11 +44,13 @@ model Modalidade {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  cotacoes Cotacao[] // Relação com cotações
 }
 
 model Promocao {
   id        Int      @id @default(autoincrement())
-  tipo      String   // 'dobro', 'percentual', 'fixo', 'cashback'
+  tipo      String // 'dobro', 'percentual', 'fixo', 'cashback'
   valor     Float
   titulo    String?
   descricao String?
@@ -54,6 +58,8 @@ model Promocao {
   order     Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  cotacoes Cotacao[] // Relação com cotações
 }
 
 model Extracao {
@@ -63,139 +69,173 @@ model Extracao {
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  cotacoes Cotacao[] // Relação com cotações
 }
 
 model Cotacao {
-  id        Int      @id @default(autoincrement())
-  name      String?
-  value     String?
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  name         String? // Nome opcional da cotação
+  value        String? // Valor da cotação (ex: "1x R$ 7000.00")
+  modalidadeId Int? // ID da modalidade (null = todas)
+  extracaoId   Int? // ID da extração (null = todas)
+  promocaoId   Int? // ID da promoção (null = nenhuma)
+  isSpecial    Boolean  @default(false) // Marca com foguinho 🔥
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  modalidade Modalidade? @relation(fields: [modalidadeId], references: [id])
+  extracao   Extracao?   @relation(fields: [extracaoId], references: [id])
+  promocao   Promocao?   @relation(fields: [promocaoId], references: [id])
+
+  @@index([modalidadeId])
+  @@index([extracaoId])
+  @@index([promocaoId])
+  @@index([isSpecial, active])
 }
 
 model Tema {
-  id          String   @id @default(uuid()) // Prisma gera UUID mesmo no MySQL
-  nome        String
-  primaria    String   @default("#052370")
-  secundaria  String   @default("#FFD700")
-  acento      String   @default("#FF4444")
-  sucesso     String   @default("#25D366")
-  texto       String   @default("#1C1C1C")
-  textoSecundario String @default("#4A4A4A")
-  fundo       String   @default("#F5F5F5")
-  fundoSecundario String @default("#FFFFFF")
-  ativo       Boolean  @default(false)
-  criadoEm    DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-  
+  id              String   @id @default(uuid()) // Prisma gera UUID mesmo no MySQL
+  nome            String
+  primaria        String   @default("#052370")
+  secundaria      String   @default("#FFD700")
+  acento          String   @default("#FF4444")
+  sucesso         String   @default("#25D366")
+  texto           String   @default("#1C1C1C")
+  textoSecundario String   @default("#4A4A4A")
+  textoDestaque   String?  @default("#1F2937") // Para textos destacados (ex: gray-800)
+  textoTerciario  String?  @default("#6B7280") // Para textos terciários (ex: gray-600)
+  fundo           String   @default("#F5F5F5")
+  fundoSecundario String   @default("#FFFFFF")
+  ativo           Boolean  @default(false)
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+
   @@map("Tema")
 }
 
 model Configuracao {
-  id                  Int      @id @default(autoincrement())
-  nomePlataforma      String   @default("Poste no Bicho")
-  numeroSuporte       String   @default("(00) 00000-0000")
-  emailSuporte        String   @default("suporte@postenobicho.com")
-  whatsappSuporte     String   @default("5500000000000")
-  logoSite            String?  @default("")
-  liquidacaoAutomatica Boolean @default(true) // Controla se a liquidação automática está ativa
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                   Int      @id @default(autoincrement())
+  nomePlataforma       String   @default("Poste no Bicho")
+  numeroSuporte        String   @default("(00) 00000-0000")
+  emailSuporte         String   @default("suporte@postenobicho.com")
+  whatsappSuporte      String   @default("5500000000000")
+  logoSite             String?  @default("")
+  liquidacaoAutomatica Boolean  @default(true) // Controla se a liquidação automática está ativa
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ConfiguracaoHorarios {
+  id                     Int       @id @default(autoincrement())
+  horario09              String?   @default("09:10")
+  horario11              String?   @default("11:10")
+  horario14              String?   @default("14:10")
+  horario16              String?   @default("16:10")
+  horario18              String?   @default("18:10")
+  horarioFederal         String?   @default("19:55")
+  horario21              String?   @default("21:10")
+  diasFederal            String    @default("Quarta,Sábado") // Dias separados por vírgula
+  diasSem18e21           String?   @default("Domingo") // Dias sem extrações às 18h e 21h
+  proximaDataSemExtracao DateTime? // Próxima data sem extrações
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 }
 
 model LimiteDescarga {
-  id              Int      @id @default(autoincrement())
-  modalidade      String   // Nome da modalidade
-  premio          Int      // 1 ao 5 (prêmio)
-  limite          Float    // Limite em R$
-  ativo           Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  id         Int      @id @default(autoincrement())
+  modalidade String // Nome da modalidade
+  premio     Int // 1 ao 5 (prêmio)
+  limite     Float // Limite em R$
+  ativo      Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   @@unique([modalidade, premio])
   @@index([modalidade])
 }
 
 model AlertaDescarga {
-  id              Int      @id @default(autoincrement())
-  modalidade      String
-  premio          Int
-  valorAtual      Float    // Valor total apostado
-  limite          Float    // Limite configurado
-  excedente       Float    // Valor que excedeu o limite
-  resolvido       Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  id         Int      @id @default(autoincrement())
+  modalidade String
+  premio     Int
+  valorAtual Float // Valor total apostado
+  limite     Float // Limite configurado
+  excedente  Float // Valor que excedeu o limite
+  resolvido  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   @@index([modalidade, premio])
   @@index([resolvido])
   @@index([createdAt])
 }
 
 model CotacaoEspecial {
-  id              Int      @id @default(autoincrement())
-  tipo            String   // 'milhar' ou 'centena'
-  numero          String   // Número cotado (ex: "2026" para milhar, "026" para centena)
-  ativo           Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  id        Int      @id @default(autoincrement())
+  tipo      String // 'milhar' ou 'centena'
+  numero    String // Número cotado (ex: "2026" para milhar, "026" para centena)
+  cotacao   Float? // Valor da cotação (multiplicador do prêmio base)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([tipo, numero])
   @@index([tipo, ativo])
 }
 
 model Gateway {
-  id        Int      @id @default(autoincrement())
-  name      String
-  tipo      String   @default("receba") // receba, nxgate, etc.
-  baseUrl   String
-  apiKey    String
+  id         Int      @id @default(autoincrement())
+  name       String
+  tipo       String   @default("receba") // receba, nxgate, etc.
+  baseUrl    String
+  apiKey     String
   webhookUrl String? // URL do webhook (opcional)
-  sandbox   Boolean  @default(true)
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
+  sandbox    Boolean  @default(true)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
   @@index([tipo, active])
 }
 
 model Usuario {
-  id        Int      @id @default(autoincrement())
-  nome      String
-  email     String   @unique
-  telefone  String?
-  passwordHash String?
-  saldo     Float    @default(0)
-  bonus     Float    @default(0)
-  bonusBloqueado Float @default(0)
-  rolloverNecessario Float @default(0) // quanto precisa apostar para liberar o bônus
-  rolloverAtual      Float @default(0) // quanto já apostou que conta para o rollover
-  bonusSemanal Int   @default(0)
-  ativo     Boolean  @default(true)
-  saques    Saque[]
-  apostas   Aposta[]
-  transacoes Transacao[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 Int         @id @default(autoincrement())
+  nome               String
+  email              String      @unique
+  telefone           String?
+  passwordHash       String?
+  saldo              Float       @default(0)
+  bonus              Float       @default(0)
+  bonusBloqueado     Float       @default(0)
+  rolloverNecessario Float       @default(0) // quanto precisa apostar para liberar o bônus
+  rolloverAtual      Float       @default(0) // quanto já apostou que conta para o rollover
+  bonusSemanal       Int         @default(0)
+  ativo              Boolean     @default(true)
+  saques             Saque[]
+  apostas            Aposta[]
+  transacoes         Transacao[]
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 }
 
 model Aposta {
-  id               Int      @id @default(autoincrement())
-  usuarioId        Int
-  concurso         String?
-  loteria          String?
-  estado           String?
-  horario          String?
-  dataConcurso     DateTime?
-  modalidade       String?
-  aposta           String?
-  valor            Float    @default(0)
-  retornoPrevisto  Float    @default(0)
-  status           String   @default("pendente")
-  detalhes         Json?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id              Int       @id @default(autoincrement())
+  usuarioId       Int
+  concurso        String?
+  loteria         String?
+  estado          String?
+  horario         String?
+  dataConcurso    DateTime?
+  modalidade      String?
+  aposta          String?
+  valor           Float     @default(0)
+  retornoPrevisto Float     @default(0)
+  status          String    @default("pendente")
+  detalhes        String?   @db.Text
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   usuario Usuario @relation(fields: [usuarioId], references: [id])
 
@@ -203,36 +243,36 @@ model Aposta {
 }
 
 model Saque {
-  id        Int      @id @default(autoincrement())
-  usuarioId Int
-  valor     Float
-  status    String   @default("pendente") // pendente, aprovado, rejeitado, saque-pago, saque-falhou
-  motivo    String?
-  chavePix  String?  // Chave PIX para saque
-  tipoChavePix String? // CPF, CNPJ, PHONE, EMAIL, RANDOM
+  id                Int      @id @default(autoincrement())
+  usuarioId         Int
+  valor             Float
+  status            String   @default("pendente") // pendente, aprovado, rejeitado, saque-pago, saque-falhou
+  motivo            String?
+  chavePix          String? // Chave PIX para saque
+  tipoChavePix      String? // CPF, CNPJ, PHONE, EMAIL, RANDOM
   referenciaExterna String? // ID da transação no gateway
-  gatewayId  Int?    // ID do gateway usado (se aplicável)
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  gatewayId         Int? // ID do gateway usado (se aplicável)
+  usuario           Usuario  @relation(fields: [usuarioId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([usuarioId])
   @@index([status])
 }
 
 model Transacao {
-  id        Int      @id @default(autoincrement())
-  usuarioId Int
-  tipo      String   // 'deposito', 'saque', etc.
-  status    String   @default("pendente") // pendente, pago, falhou
-  valor     Float
-  gatewayId Int?
-  descricao String?
-  bonusAplicado Float @default(0)
+  id                Int      @id @default(autoincrement())
+  usuarioId         Int
+  tipo              String // 'deposito', 'saque', etc.
+  status            String   @default("pendente") // pendente, pago, falhou
+  valor             Float
+  gatewayId         Int?
+  descricao         String?
+  bonusAplicado     Float    @default(0)
   referenciaExterna String?
-  usuario   Usuario  @relation(fields: [usuarioId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  usuario           Usuario  @relation(fields: [usuarioId], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([usuarioId])
 }

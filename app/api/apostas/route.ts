@@ -98,12 +98,14 @@ export async function POST(request: Request) {
         const betData = (detalhes as any).betData as {
           modality: string | null
           modalityName?: string | null
-          animalBets: number[][]
+          animalBets?: number[][]
+          numberBets?: string[]
           position: string | null
           customPosition?: boolean
           customPositionValue?: string
           amount: number
           divisionType: 'all' | 'each'
+          isNumberModality?: boolean
         }
 
         // Mapear nome da modalidade para tipo
@@ -175,47 +177,75 @@ export async function POST(request: Request) {
         resultadoInstantaneo = gerarResultadoInstantaneo(Math.max(pos_to, 7))
 
         // Calcular valor por palpite
-        const qtdPalpites = betData.animalBets.length
+        const qtdPalpites = betData.isNumberModality 
+          ? (betData.numberBets?.length || 0)
+          : (betData.animalBets?.length || 0)
         const valorPorPalpite = calcularValorPorPalpite(
           betData.amount,
           qtdPalpites,
           betData.divisionType
         )
 
-        // Conferir cada palpite
-        for (const animalBet of betData.animalBets) {
-          const grupos = animalBet.map((animalId) => {
-            // Encontrar o grupo do animal
-            const animal = ANIMALS.find((a) => a.id === animalId)
-            if (!animal) {
-              throw new Error(`Animal não encontrado: ${animalId}`)
-            }
-            return animal.group
-          })
+        // Processar palpites de animais
+        if (betData.animalBets && betData.animalBets.length > 0) {
+          for (const animalBet of betData.animalBets) {
+            const grupos = animalBet.map((animalId) => {
+              // Encontrar o grupo do animal
+              const animal = ANIMALS.find((a) => a.id === animalId)
+              if (!animal) {
+                throw new Error(`Animal não encontrado: ${animalId}`)
+              }
+              return animal.group
+            })
 
-          // Para modalidades de número, precisamos do número, não dos grupos
-          let palpiteData: { grupos?: number[]; numero?: string } = {}
-          
-          if (modalityType.includes('GRUPO') || modalityType === 'PASSE' || modalityType === 'PASSE_VAI_E_VEM') {
-            palpiteData = { grupos }
-          } else {
-            // Para modalidades de número, precisamos converter grupos em números
-            // Por enquanto, vamos usar o primeiro grupo como exemplo
-            // TODO: Implementar entrada de números para modalidades numéricas
-            throw new Error('Modalidades numéricas ainda não suportadas para instantânea')
+            const palpiteData: { grupos?: number[]; numero?: string } = { grupos }
+
+            const conferencia = conferirPalpite(
+              resultadoInstantaneo,
+              modalityType,
+              palpiteData,
+              pos_from,
+              pos_to,
+              valorPorPalpite,
+              betData.divisionType
+            )
+
+            premioTotal += conferencia.totalPrize
           }
+        }
 
-          const conferencia = conferirPalpite(
-            resultadoInstantaneo,
-            modalityType,
-            palpiteData,
-            pos_from,
-            pos_to,
-            valorPorPalpite,
-            betData.divisionType
-          )
+        // Processar palpites numéricos
+        if (betData.numberBets && betData.numberBets.length > 0) {
+          for (const numberBet of betData.numberBets) {
+            let palpiteData: { grupos?: number[]; numero?: string; dezenas?: string } = {}
 
-          premioTotal += conferencia.totalPrize
+            // Processar diferentes formatos de números
+            if (modalityType === 'DUQUE_DEZENA_EMD' || modalityType === 'TERNO_DEZENA_EMD') {
+              // EMD: formato "12-23" ou "12-23-34"
+              palpiteData = { dezenas: numberBet }
+            } else if (modalityType === 'QUADRA_DEZENA') {
+              // Quadra de Dezena: formato "12-23-34-45"
+              palpiteData = { dezenas: numberBet }
+            } else if (modalityType === 'DUQUE_DEZENA' || modalityType === 'TERNO_DEZENA') {
+              // Duque/Terno de Dezena: formato "12-23" ou "12-23-34"
+              palpiteData = { dezenas: numberBet }
+            } else {
+              // Modalidades numéricas normais (Dezena, Centena, Milhar)
+              palpiteData = { numero: numberBet }
+            }
+
+            const conferencia = conferirPalpite(
+              resultadoInstantaneo,
+              modalityType,
+              palpiteData,
+              pos_from,
+              pos_to,
+              valorPorPalpite,
+              betData.divisionType
+            )
+
+            premioTotal += conferencia.totalPrize
+          }
         }
 
         // Atualizar saldo: debita aposta e credita prêmio
@@ -242,6 +272,14 @@ export async function POST(request: Request) {
         })
       }
 
+      // Preparar detalhes como JSON string
+      const detalhesObj = {
+        ...(detalhes && typeof detalhes === 'object' ? detalhes : {}),
+        resultadoInstantaneo: resultadoInstantaneo,
+        premioTotal,
+      }
+      const detalhesString = JSON.stringify(detalhesObj)
+
       const created = await tx.aposta.create({
         data: {
           usuarioId: user.id,
@@ -257,11 +295,7 @@ export async function POST(request: Request) {
           // Aposta instantânea: liquidado se ganhou, perdida se não ganhou
           // Aposta normal: pendente até ser liquidada pelo cron
           status: isInstant ? (premioTotal > 0 ? 'liquidado' : 'perdida') : (status || 'pendente'),
-          detalhes: {
-            ...(detalhes && typeof detalhes === 'object' ? detalhes : {}),
-            resultadoInstantaneo: resultadoInstantaneo,
-            premioTotal,
-          },
+          detalhes: detalhesString,
         },
       })
 

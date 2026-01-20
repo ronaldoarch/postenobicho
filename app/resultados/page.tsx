@@ -11,10 +11,12 @@ import { formatDateLabel, getDefaultDateISO, groupResultsByDrawTime } from '@/li
 
 export default function ResultadosPage() {
   const defaultDate = getDefaultDateISO()
+  // Filtrar por Rio de Janeiro por padrão
+  const rioDeJaneiro = LOCATIONS.find(loc => loc.name.toLowerCase().includes('rio')) || LOCATIONS[0]
   const [selectedDate, setSelectedDate] = useState(defaultDate)
-  const [selectedLocation, setSelectedLocation] = useState(LOCATIONS[0].name)
+  const [selectedLocation, setSelectedLocation] = useState(rioDeJaneiro.name)
   const [activeTab, setActiveTab] = useState<'bicho' | 'loteria'>('bicho')
-  const { results, loading, load } = useResultados({ date: defaultDate, location: LOCATIONS[0].name })
+  const { results, loading, load } = useResultados({ date: defaultDate, location: rioDeJaneiro.name })
 
   const groupedResults = useMemo(
     () => groupResultsByDrawTime(results, selectedLocation, selectedDate),

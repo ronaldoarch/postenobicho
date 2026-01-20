@@ -397,7 +397,7 @@ export async function GET(req: NextRequest) {
 
     Object.entries(resultadosPorLoteria).forEach(([nomeLoteria, resultadosBichoCerto]) => {
       resultadosBichoCerto.forEach((resultadoBichoCerto) => {
-        resultadoBichoCerto.premios.forEach((premio) => {
+        resultadoBichoCerto.premios.forEach((premio: any) => {
           const estado = inferUfFromName(nomeLoteria)
           const locationResolved = UF_NAME_MAP[estado || ''] || nomeLoteria
           
@@ -413,7 +413,6 @@ export async function GET(req: NextRequest) {
             animal: premio.animal,
             drawTime: horarioNormalizado,
             horario: horarioNormalizado,
-            horarioOriginal: horarioOriginal !== horarioNormalizado ? horarioOriginal : undefined,
             loteria: nomeLoteria,
             location: locationResolved,
             date: dataBusca,
@@ -433,11 +432,15 @@ export async function GET(req: NextRequest) {
     }
     
     // Filtro por UF ou nome
+    // Por padrão, mostrar apenas resultados do Rio de Janeiro (RJ)
     if (uf) {
       results = results.filter((r) => (r.estado || '').toUpperCase() === uf)
     } else if (locationFilter) {
       const lf = normalizeText(locationFilter)
       results = results.filter((r) => normalizeText(r.location || '').includes(lf))
+    } else {
+      // Sem filtro específico, mostrar apenas RJ
+      results = results.filter((r) => (r.estado || '').toUpperCase() === 'RJ')
     }
 
     // Logs de debug

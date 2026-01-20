@@ -6,26 +6,26 @@ export const MODALITIES: Modality[] = [
   // Linha 2: Dupla de Grupo | Milhar/Centena
   // etc.
   { id: 1, name: 'Grupo', value: '1x R$ 18.00', hasLink: false },
-  { id: 9, name: 'Milhar', value: '1x R$ 6000.00', hasLink: true },
-  { id: 2, name: 'Dupla de Grupo', value: '1x R$ 16.00', hasLink: false },
+  { id: 9, name: 'Milhar', value: '1x R$ 5000.00', hasLink: true },
+  { id: 2, name: 'Dupla de Grupo', value: '1x R$ 180.00', hasLink: false },
   { id: 10, name: 'Milhar/Centena', value: '1x R$ 3300.00', hasLink: false },
-  { id: 3, name: 'Terno de Grupo', value: '1x R$ 150.00', hasLink: false },
+  { id: 3, name: 'Terno de Grupo', value: '1x R$ 1800.00', hasLink: false },
   { id: 11, name: 'Centena', value: '1x R$ 600.00', hasLink: false },
-  { id: 4, name: 'Quadra de Grupo', value: '1x R$ 1000.00', hasLink: false },
+  { id: 4, name: 'Quadra de Grupo', value: '1x R$ 5000.00', hasLink: false },
   { id: 12, name: 'Dezena', value: '1x R$ 60.00', hasLink: false },
   { id: 5, name: 'Quina de Grupo', value: '1x R$ 5000.00', hasLink: false },
-  { id: 13, name: 'Milhar Invertida', value: '1x R$ 6000.00', hasLink: false },
+  { id: 13, name: 'Milhar Invertida', value: '1x R$ 200.00', hasLink: false },
   { id: 6, name: 'Duque de Dezena', value: '1x R$ 300.00', hasLink: false },
   { id: 14, name: 'Centena Invertida', value: '1x R$ 600.00', hasLink: false },
   { id: 7, name: 'Terno de Dezena', value: '1x R$ 5000.00', hasLink: false },
   { id: 15, name: 'Dezena Invertida', value: '1x R$ 60.00', hasLink: false },
-  { id: 8, name: 'Passe vai', value: '1x R$ 90.00', hasLink: false },
-  { id: 16, name: 'Passe vai e vem', value: '1x R$ 90.00', hasLink: false },
+  { id: 8, name: 'Passe vai', value: '1x R$ 300.00', hasLink: false },
+  { id: 16, name: 'Passe vai e vem', value: '1x R$ 150.00', hasLink: false },
   { id: 17, name: 'Quadra de Dezena', value: '1x R$ 300.00', hasLink: false },
   { id: 18, name: 'Duque de Dezena (EMD)', value: '1x R$ 300.00', hasLink: false },
   { id: 19, name: 'Terno de Dezena (EMD)', value: '1x R$ 5000.00', hasLink: false },
   { id: 20, name: 'Dezeninha', value: 'Variável', hasLink: false },
-  { id: 21, name: 'Terno de Grupo Seco', value: '1x R$ 150.00', hasLink: false },
+  { id: 21, name: 'Terno de Grupo Seco', value: '1x R$ 150.00', hasLink: false }, // Odd: 150x (correto)
 ]
 
 export const SPECIAL_QUOTATIONS: SpecialQuotation[] = [

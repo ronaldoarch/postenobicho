@@ -19,7 +19,10 @@ module.exports = {
         'white-125': 'rgba(255, 255, 255, 0.125)',
         'gray-scale': {
           '100': 'var(--tema-fundo)',
+          '600': 'var(--tema-texto-terciario)',
           '700': 'var(--tema-texto-secundario)',
+          '800': 'var(--tema-texto-destaque)',
+          '900': 'var(--tema-texto-destaque)',
           '950': 'var(--tema-texto)',
         },
         'grey-scale': {

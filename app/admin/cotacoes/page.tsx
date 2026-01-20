@@ -5,11 +5,17 @@ import Link from 'next/link'
 
 interface Cotacao {
   id: number
-  grupo: string
-  animal: string
-  valor: string
+  name?: string
+  value?: string
+  modalidadeId?: number
+  extracaoId?: number
+  promocaoId?: number
+  isSpecial: boolean
   active: boolean
   createdAt: string
+  modalidade?: { id: number; name: string }
+  extracao?: { id: number; name: string; time?: string }
+  promocao?: { id: number; titulo?: string; tipo: string }
 }
 
 export default function CotacoesPage() {
@@ -42,6 +48,7 @@ export default function CotacoesPage() {
       loadCotacoes()
     } catch (error) {
       console.error('Erro ao atualizar cotação:', error)
+      alert('Erro ao atualizar cotação')
     }
   }
 
@@ -53,6 +60,7 @@ export default function CotacoesPage() {
       loadCotacoes()
     } catch (error) {
       console.error('Erro ao deletar cotação:', error)
+      alert('Erro ao deletar cotação')
     }
   }
 
@@ -73,62 +81,87 @@ export default function CotacoesPage() {
       </div>
 
       <div className="bg-white rounded-xl shadow-md overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Grupo</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Animal</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {cotacoes.length === 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
-                  Nenhuma cotação cadastrada
-                </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valor</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Modalidade</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Extração</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Promoção</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Especial</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
               </tr>
-            ) : (
-              cotacoes.map((cotacao) => (
-                <tr key={cotacao.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{cotacao.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{cotacao.grupo}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{cotacao.animal}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{cotacao.valor}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <button
-                      onClick={() => toggleActive(cotacao.id, cotacao.active)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        cotacao.active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {cotacao.active ? 'Ativa' : 'Inativa'}
-                    </button>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <Link
-                      href={`/admin/cotacoes/${cotacao.id}`}
-                      className="text-blue hover:text-blue-700 mr-4"
-                    >
-                      Editar
-                    </Link>
-                    <button
-                      onClick={() => deleteCotacao(cotacao.id)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Deletar
-                    </button>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {cotacoes.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-4 text-center text-gray-500">
+                    Nenhuma cotação cadastrada
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                cotacoes.map((cotacao) => (
+                  <tr key={cotacao.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{cotacao.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {cotacao.name || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-blue">
+                      {cotacao.value || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {cotacao.modalidade?.name || 'Todas'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {cotacao.extracao?.name || 'Todas'}
+                      {cotacao.extracao?.time && ` (${cotacao.extracao.time})`}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {cotacao.promocao?.titulo || cotacao.promocao?.tipo || 'Nenhuma'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      {cotacao.isSpecial ? (
+                        <span className="text-red-600 font-bold">🔥</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => toggleActive(cotacao.id, cotacao.active)}
+                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          cotacao.active
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {cotacao.active ? 'Ativa' : 'Inativa'}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <Link
+                        href={`/admin/cotacoes/${cotacao.id}`}
+                        className="text-blue hover:text-blue-700 mr-4"
+                      >
+                        Editar
+                      </Link>
+                      <button
+                        onClick={() => deleteCotacao(cotacao.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Deletar
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

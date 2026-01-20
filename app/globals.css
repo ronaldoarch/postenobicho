@@ -14,6 +14,22 @@ body {
   font-family: 'Sora', sans-serif;
 }
 
+/* Compensar altura do header fixo com logo 3D */
+body {
+  padding-top: 120px; /* Altura fixa do header (70px) + espaço para logo que passa abaixo como adesivo (~50px) */
+}
+
+@media (min-width: 1024px) {
+  body {
+    padding-top: 160px; /* Altura fixa do header (70px) + espaço para logo maior que passa abaixo como adesivo (~90px) */
+  }
+}
+
+/* Classe para páginas que não precisam do padding (ex: admin) */
+body.no-header-padding {
+  padding-top: 0;
+}
+
 :root {
   --swiper-theme-color: #007aff;
   
@@ -24,6 +40,8 @@ body {
   --tema-sucesso: #25D366;
   --tema-texto: #1C1C1C;
   --tema-texto-secundario: #4A4A4A;
+  --tema-texto-destaque: #1F2937;
+  --tema-texto-terciario: #6B7280;
   --tema-fundo: #F5F5F5;
   --tema-fundo-secundario: #FFFFFF;
 }
@@ -67,6 +85,14 @@ body {
 
 .text-tema-texto-secundario {
   color: var(--tema-texto-secundario);
+}
+
+.text-tema-texto-destaque {
+  color: var(--tema-texto-destaque);
+}
+
+.text-tema-texto-terciario {
+  color: var(--tema-texto-terciario);
 }
 
 .bg-tema-fundo {

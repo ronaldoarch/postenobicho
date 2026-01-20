@@ -58,11 +58,11 @@ export default function BottomNav() {
         Cotação
       </a>
 
-      {/* Carteira */}
-      <div className="flex cursor-pointer flex-col items-center justify-center gap-1 p-2 text-xs">
-        <span className="iconify i-fluent:wallet-16-regular" style={{ fontSize: '20px' }}></span>
-        Carteira
-      </div>
+      {/* Suporte */}
+      <a href="/suporte" className="flex cursor-pointer flex-col items-center justify-center gap-1 p-2 text-xs">
+        <span className="iconify i-fluent:question-circle-16-regular" style={{ fontSize: '20px' }}></span>
+        Suporte
+      </a>
     </div>
   )
 }

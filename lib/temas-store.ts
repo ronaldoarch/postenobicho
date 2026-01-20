@@ -10,6 +10,8 @@ export interface Tema {
     sucesso: string
     texto: string
     textoSecundario: string
+    textoDestaque?: string
+    textoTerciario?: string
     fundo: string
     fundoSecundario: string
   }
@@ -33,6 +35,8 @@ export async function getTemas(): Promise<Tema[]> {
       sucesso: t.sucesso,
       texto: t.texto,
       textoSecundario: t.textoSecundario,
+      textoDestaque: t.textoDestaque || t.texto,
+      textoTerciario: t.textoTerciario || t.textoSecundario,
       fundo: t.fundo,
       fundoSecundario: t.fundoSecundario,
     },
@@ -59,6 +63,8 @@ export async function getTema(id: string): Promise<Tema | undefined> {
       sucesso: tema.sucesso,
       texto: tema.texto,
       textoSecundario: tema.textoSecundario,
+      textoDestaque: tema.textoDestaque || tema.texto,
+      textoTerciario: tema.textoTerciario || tema.textoSecundario,
       fundo: tema.fundo,
       fundoSecundario: tema.fundoSecundario,
     },
@@ -84,6 +90,8 @@ export async function getTemaAtivo(): Promise<Tema> {
         sucesso: '#25D366',
         texto: '#1C1C1C',
         textoSecundario: '#4A4A4A',
+        textoDestaque: '#1F2937',
+        textoTerciario: '#6B7280',
         fundo: '#F5F5F5',
         fundoSecundario: '#FFFFFF',
         ativo: true,
@@ -101,6 +109,8 @@ export async function getTemaAtivo(): Promise<Tema> {
       sucesso: tema.sucesso,
       texto: tema.texto,
       textoSecundario: tema.textoSecundario,
+      textoDestaque: tema.textoDestaque || tema.texto,
+      textoTerciario: tema.textoTerciario || tema.textoSecundario,
       fundo: tema.fundo,
       fundoSecundario: tema.fundoSecundario,
     },
@@ -120,6 +130,8 @@ export async function createTema(tema: Omit<Tema, 'id' | 'criadoEm' | 'atualizad
       sucesso: tema.cores.sucesso,
       texto: tema.cores.texto,
       textoSecundario: tema.cores.textoSecundario,
+      textoDestaque: tema.cores.textoDestaque || tema.cores.texto,
+      textoTerciario: tema.cores.textoTerciario || tema.cores.textoSecundario,
       fundo: tema.cores.fundo,
       fundoSecundario: tema.cores.fundoSecundario,
       ativo: tema.ativo,
@@ -136,6 +148,8 @@ export async function createTema(tema: Omit<Tema, 'id' | 'criadoEm' | 'atualizad
       sucesso: novoTema.sucesso,
       texto: novoTema.texto,
       textoSecundario: novoTema.textoSecundario,
+      textoDestaque: novoTema.textoDestaque || novoTema.texto,
+      textoTerciario: novoTema.textoTerciario || novoTema.textoSecundario,
       fundo: novoTema.fundo,
       fundoSecundario: novoTema.fundoSecundario,
     },
@@ -156,6 +170,8 @@ export async function updateTema(id: string, updates: Partial<Tema>): Promise<Te
     data.sucesso = updates.cores.sucesso
     data.texto = updates.cores.texto
     data.textoSecundario = updates.cores.textoSecundario
+    if (updates.cores.textoDestaque) data.textoDestaque = updates.cores.textoDestaque
+    if (updates.cores.textoTerciario) data.textoTerciario = updates.cores.textoTerciario
     data.fundo = updates.cores.fundo
     data.fundoSecundario = updates.cores.fundoSecundario
   }
@@ -176,6 +192,8 @@ export async function updateTema(id: string, updates: Partial<Tema>): Promise<Te
       sucesso: tema.sucesso,
       texto: tema.texto,
       textoSecundario: tema.textoSecundario,
+      textoDestaque: tema.textoDestaque || tema.texto,
+      textoTerciario: tema.textoTerciario || tema.textoSecundario,
       fundo: tema.fundo,
       fundoSecundario: tema.fundoSecundario,
     },
@@ -214,6 +232,8 @@ export async function setTemaAtivo(id: string): Promise<Tema | null> {
       sucesso: tema.sucesso,
       texto: tema.texto,
       textoSecundario: tema.textoSecundario,
+      textoDestaque: tema.textoDestaque || tema.texto,
+      textoTerciario: tema.textoTerciario || tema.textoSecundario,
       fundo: tema.fundo,
       fundoSecundario: tema.fundoSecundario,
     },

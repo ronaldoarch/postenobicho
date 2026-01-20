@@ -3,6 +3,8 @@ import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 import { parseSessionToken } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const session = cookies().get('lotbicho_session')?.value

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
+import AlertaBonito from '@/components/AlertaBonito'
+import { useAlerta } from '@/hooks/useAlerta'
 
 interface Configuracoes {
   nomePlataforma: string
@@ -12,7 +14,21 @@ interface Configuracoes {
   liquidacaoAutomatica: boolean
 }
 
+interface HorariosConfig {
+  horario09?: string | null
+  horario11?: string | null
+  horario14?: string | null
+  horario16?: string | null
+  horario18?: string | null
+  horarioFederal?: string | null
+  horario21?: string | null
+  diasFederal?: string
+  diasSem18e21?: string | null
+  proximaDataSemExtracao?: string | null
+}
+
 export default function ConfiguracoesPage() {
+  const { alerta, sucesso, erro, fecharAlerta } = useAlerta()
   const [config, setConfig] = useState<Configuracoes>({
     nomePlataforma: 'Poste no Bicho',
     numeroSuporte: '(00) 00000-0000',
@@ -24,9 +40,23 @@ export default function ConfiguracoesPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [horarios, setHorarios] = useState<HorariosConfig>({
+    horario09: '09:10',
+    horario11: '11:10',
+    horario14: '14:10',
+    horario16: '16:10',
+    horario18: '18:10',
+    horarioFederal: '19:55',
+    horario21: '21:10',
+    diasFederal: 'Quarta,Sábado',
+    diasSem18e21: 'Domingo',
+    proximaDataSemExtracao: null,
+  })
+  const [savingHorarios, setSavingHorarios] = useState(false)
 
   useEffect(() => {
     loadConfig()
+    loadHorarios()
   }, [])
 
   const loadConfig = async () => {
@@ -40,6 +70,25 @@ export default function ConfiguracoesPage() {
       console.error('Erro ao carregar configurações:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadHorarios = async () => {
+    try {
+      const response = await fetch('/api/admin/horarios', {
+        credentials: 'include',
+      })
+      const data = await response.json()
+      if (data.horarios) {
+        setHorarios({
+          ...data.horarios,
+          proximaDataSemExtracao: data.horarios.proximaDataSemExtracao
+            ? new Date(data.horarios.proximaDataSemExtracao).toISOString().split('T')[0]
+            : null,
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao carregar horários:', error)
     }
   }
 
@@ -60,12 +109,13 @@ export default function ConfiguracoesPage() {
 
       if (data.success) {
         setConfig({ ...config, logoSite: data.url })
+        sucesso('Upload Concluído', 'Logo enviado com sucesso!')
       } else {
-        alert(data.error || 'Erro ao fazer upload')
+        erro('Erro no Upload', data.error || 'Erro ao fazer upload')
       }
     } catch (error) {
       console.error('Erro ao fazer upload:', error)
-      alert('Erro ao fazer upload do arquivo')
+      erro('Erro no Upload', 'Erro ao fazer upload do arquivo')
     } finally {
       setUploadingLogo(false)
     }
@@ -84,13 +134,13 @@ export default function ConfiguracoesPage() {
       })
 
       if (response.ok) {
-        alert('Configurações salvas com sucesso!')
+        sucesso('Configurações Salvas', 'Suas configurações foram salvas com sucesso!')
       } else {
-        alert('Erro ao salvar configurações')
+        erro('Erro ao Salvar', 'Não foi possível salvar as configurações')
       }
     } catch (error) {
       console.error('Erro:', error)
-      alert('Erro ao salvar configurações')
+      erro('Erro ao Salvar', 'Ocorreu um erro ao salvar as configurações')
     } finally {
       setSaving(false)
     }
@@ -244,6 +294,238 @@ export default function ConfiguracoesPage() {
           </button>
         </div>
       </form>
+
+      {/* Configurações de Horários e Dias */}
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault()
+          setSavingHorarios(true)
+          try {
+            const response = await fetch('/api/admin/horarios', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                ...horarios,
+                proximaDataSemExtracao: horarios.proximaDataSemExtracao
+                  ? new Date(horarios.proximaDataSemExtracao).toISOString()
+                  : null,
+              }),
+            })
+
+            if (response.ok) {
+              sucesso('Horários Salvos', 'Horários e dias foram salvos com sucesso!')
+            } else {
+              erro('Erro ao Salvar', 'Não foi possível salvar os horários')
+            }
+          } catch (error) {
+            console.error('Erro:', error)
+            erro('Erro ao Salvar', 'Ocorreu um erro ao salvar os horários')
+          } finally {
+            setSavingHorarios(false)
+          }
+        }}
+        className="bg-white rounded-xl shadow-md p-6 mt-8 space-y-6"
+      >
+        {/* Dias de Loteria Federal */}
+        <div className="border-b border-gray-200 pb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Dias de Loteria Federal</h2>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: 'Domingo', label: 'Domingo' },
+              { value: 'Segunda', label: 'Segunda-feira' },
+              { value: 'Terça', label: 'Terça-feira' },
+              { value: 'Quarta', label: 'Quarta-feira' },
+              { value: 'Quinta', label: 'Quinta-feira' },
+              { value: 'Sexta', label: 'Sexta-feira' },
+              { value: 'Sábado', label: 'Sábado' },
+            ].map((dia) => {
+              const diasArray = horarios.diasFederal?.split(',').map((d) => d.trim()) || []
+              const isSelected = diasArray.includes(dia.value)
+              return (
+                <button
+                  key={dia.value}
+                  type="button"
+                  onClick={() => {
+                    const diasArray = horarios.diasFederal?.split(',').map((d) => d.trim()) || []
+                    if (isSelected) {
+                      const novosDias = diasArray.filter((d) => d !== dia.value).join(',')
+                      setHorarios({
+                        ...horarios,
+                        diasFederal: novosDias || 'Quarta,Sábado',
+                      })
+                    } else {
+                      setHorarios({
+                        ...horarios,
+                        diasFederal: [...diasArray, dia.value].join(','),
+                      })
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    isSelected
+                      ? 'bg-blue text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {dia.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Horários Limites */}
+        <div className="border-b border-gray-200 pb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Horários Limites</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">09 Horas</label>
+              <input
+                type="time"
+                value={horarios.horario09 || ''}
+                onChange={(e) => setHorarios({ ...horarios, horario09: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">11 Horas</label>
+              <input
+                type="time"
+                value={horarios.horario11 || ''}
+                onChange={(e) => setHorarios({ ...horarios, horario11: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">14 Horas</label>
+              <input
+                type="time"
+                value={horarios.horario14 || ''}
+                onChange={(e) => setHorarios({ ...horarios, horario14: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">16 Horas</label>
+              <input
+                type="time"
+                value={horarios.horario16 || ''}
+                onChange={(e) => setHorarios({ ...horarios, horario16: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">18 Horas</label>
+              <input
+                type="time"
+                value={horarios.horario18 || ''}
+                onChange={(e) => setHorarios({ ...horarios, horario18: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Federal</label>
+              <input
+                type="time"
+                value={horarios.horarioFederal || ''}
+                onChange={(e) => setHorarios({ ...horarios, horarioFederal: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">21 Horas</label>
+              <input
+                type="time"
+                value={horarios.horario21 || ''}
+                onChange={(e) => setHorarios({ ...horarios, horario21: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Dias s/ Extrações às 18h e 21h */}
+        <div className="border-b border-gray-200 pb-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Dias s/ Extrações às 18h e 21h</h2>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: 'Domingo', label: 'Domingo' },
+              { value: 'Segunda', label: 'Segunda-feira' },
+              { value: 'Terça', label: 'Terça-feira' },
+              { value: 'Quarta', label: 'Quarta-feira' },
+              { value: 'Quinta', label: 'Quinta-feira' },
+              { value: 'Sexta', label: 'Sexta-feira' },
+              { value: 'Sábado', label: 'Sábado' },
+            ].map((dia) => {
+              const diasArray = horarios.diasSem18e21?.split(',').map((d) => d.trim()) || []
+              const isSelected = diasArray.includes(dia.value)
+              return (
+                <button
+                  key={dia.value}
+                  type="button"
+                  onClick={() => {
+                    const diasArray = horarios.diasSem18e21?.split(',').map((d) => d.trim()) || []
+                    if (isSelected) {
+                      const novosDias = diasArray.filter((d) => d !== dia.value).join(',')
+                      setHorarios({
+                        ...horarios,
+                        diasSem18e21: novosDias || null,
+                      })
+                    } else {
+                      setHorarios({
+                        ...horarios,
+                        diasSem18e21: [...diasArray, dia.value].join(','),
+                      })
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-lg transition-colors ${
+                    isSelected
+                      ? 'bg-blue text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  {dia.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Próxima Data s/ Extrações */}
+        <div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Próxima Data s/ Extrações</h2>
+          <div className="flex gap-4 items-end">
+            <div className="flex-1">
+              <input
+                type="date"
+                value={horarios.proximaDataSemExtracao || ''}
+                onChange={(e) =>
+                  setHorarios({ ...horarios, proximaDataSemExtracao: e.target.value || null })
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-transparent"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={savingHorarios}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+            >
+              {savingHorarios ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {/* Alerta bonito */}
+      {alerta && (
+        <AlertaBonito
+          isOpen={!!alerta}
+          onClose={fecharAlerta}
+          tipo={alerta.tipo}
+          titulo={alerta.titulo}
+          mensagem={alerta.mensagem}
+        />
+      )}
     </div>
   )
 }

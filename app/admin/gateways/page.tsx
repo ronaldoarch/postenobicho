@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useAlerta } from '@/hooks/useAlerta'
+import AlertaBonito from '@/components/AlertaBonito'
 
 interface Gateway {
   id: number
@@ -24,6 +26,7 @@ const emptyForm: Omit<Gateway, 'id'> = {
 }
 
 export default function GatewaysPage() {
+  const { alerta, sucesso, erro, fecharAlerta } = useAlerta()
   const [gateways, setGateways] = useState<Gateway[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -53,16 +56,41 @@ export default function GatewaysPage() {
     try {
       const method = editingId ? 'PUT' : 'POST'
       const body = editingId ? { id: editingId, ...form } : form
-      await fetch('/api/admin/gateways', {
+      
+      // Validações específicas para NXGate
+      if (form.tipo === 'nxgate') {
+        if (!form.baseUrl || !form.baseUrl.includes('nxgate.com.br')) {
+          erro('URL Inválida', 'Para NXGate, a Base URL deve ser https://nxgate.com.br')
+          setSaving(false)
+          return
+        }
+        if (!form.apiKey || form.apiKey.length < 10) {
+          erro('API Key Inválida', 'A API Key do NXGate é obrigatória e deve ter pelo menos 10 caracteres')
+          setSaving(false)
+          return
+        }
+      }
+      
+      const res = await fetch('/api/admin/gateways', {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Erro ao salvar gateway' }))
+        erro('Erro', errorData.error || 'Erro ao salvar gateway')
+        setSaving(false)
+        return
+      }
+      
+      sucesso('Sucesso', editingId ? 'Gateway atualizado com sucesso!' : 'Gateway cadastrado com sucesso!')
       setForm(emptyForm)
       setEditingId(null)
       load()
     } catch (error) {
       console.error('Erro ao salvar gateway', error)
+      erro('Erro', 'Erro ao salvar gateway. Tente novamente.')
     } finally {
       setSaving(false)
     }
@@ -82,12 +110,22 @@ export default function GatewaysPage() {
   }
 
   const handleDelete = async (id: number) => {
-    if (!confirm('Tem certeza que deseja remover este gateway?')) return
+    const gateway = gateways.find(g => g.id === id)
+    if (!gateway) return
+    
+    if (!confirm(`Tem certeza que deseja remover o gateway "${gateway.name}"?`)) return
+    
     try {
-      await fetch(`/api/admin/gateways?id=${id}`, { method: 'DELETE' })
-      load()
+      const res = await fetch(`/api/admin/gateways?id=${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        sucesso('Sucesso', 'Gateway removido com sucesso!')
+        load()
+      } else {
+        erro('Erro', 'Erro ao remover gateway')
+      }
     } catch (error) {
       console.error('Erro ao deletar gateway', error)
+      erro('Erro', 'Erro ao remover gateway')
     }
   }
 
@@ -104,11 +142,52 @@ export default function GatewaysPage() {
     }
   }
 
+  // Atualizar campos quando tipo mudar
+  useEffect(() => {
+    if (form.tipo === 'nxgate') {
+      if (!form.baseUrl || form.baseUrl === 'https://sandbox.receba.online') {
+        setForm(prev => ({ ...prev, baseUrl: 'https://nxgate.com.br' }))
+      }
+      if (!form.webhookUrl && typeof window !== 'undefined') {
+        const webhookUrl = `${window.location.origin}/api/webhooks/nxgate`
+        setForm(prev => ({ ...prev, webhookUrl }))
+      }
+    } else if (form.tipo === 'receba') {
+      if (!form.baseUrl || form.baseUrl === 'https://nxgate.com.br') {
+        setForm(prev => ({ ...prev, baseUrl: 'https://sandbox.receba.online' }))
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.tipo])
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Gateways</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Gateways de Pagamento</h1>
+          <p className="text-gray-600 mt-2">Configure os gateways de pagamento PIX para depósitos e saques</p>
+        </div>
       </div>
+
+      {/* Informações sobre NXGate */}
+      {form.tipo === 'nxgate' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-blue-900 mb-3">📋 Informações sobre NXGate</h3>
+          <div className="space-y-2 text-sm text-blue-800">
+            <p><strong>Base URL:</strong> https://nxgate.com.br</p>
+            <p><strong>API Key:</strong> Sua chave secreta fornecida pelo NXGate</p>
+            <p><strong>Webhook URL:</strong> URL onde você receberá notificações de pagamento</p>
+            <div className="mt-4 pt-4 border-t border-blue-200">
+              <p className="font-semibold mb-2">Endpoints disponíveis:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong>Depósito PIX:</strong> POST /api/pix/gerar</li>
+                <li><strong>Saque PIX:</strong> POST /api/pix/sacar</li>
+                <li><strong>Webhook:</strong> POST {form.webhookUrl || '/api/webhooks/nxgate'}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="bg-white rounded-xl shadow p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
@@ -126,7 +205,7 @@ export default function GatewaysPage() {
             />
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-gray-700">Tipo</label>
+            <label className="text-sm font-semibold text-gray-700">Tipo de Gateway</label>
             <select
               required
               value={form.tipo}
@@ -134,8 +213,9 @@ export default function GatewaysPage() {
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
             >
               <option value="receba">Receba Online</option>
-              <option value="nxgate">Nxgate</option>
+              <option value="nxgate">NXGate</option>
             </select>
+            <p className="text-xs text-gray-500">Selecione o gateway de pagamento que deseja configurar</p>
           </div>
           <div className="flex flex-col gap-2">
             <label className="text-sm font-semibold text-gray-700">Base URL</label>
@@ -146,25 +226,41 @@ export default function GatewaysPage() {
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
               placeholder={form.tipo === 'nxgate' ? 'https://nxgate.com.br' : 'https://sandbox.receba.online'}
             />
+            {form.tipo === 'nxgate' && (
+              <p className="text-xs text-gray-500">URL base da API do NXGate</p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-semibold text-gray-700">Webhook URL (opcional)</label>
+            <label className="text-sm font-semibold text-gray-700">
+              Webhook URL {form.tipo === 'nxgate' && <span className="text-red-500">*</span>}
+            </label>
             <input
               value={form.webhookUrl || ''}
               onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder="https://seudominio.com/api/webhooks/nxgate"
+              placeholder={form.tipo === 'nxgate' ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/nxgate` : 'https://seudominio.com/api/webhooks'}
             />
+            {form.tipo === 'nxgate' && (
+              <p className="text-xs text-gray-500">
+                URL onde você receberá notificações de pagamento. Deve responder com HTTP 200 e JSON: {"{"}"status": "received"{"}"}
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 md:col-span-2">
-            <label className="text-sm font-semibold text-gray-700">API Key</label>
+            <label className="text-sm font-semibold text-gray-700">API Key (Chave Secreta)</label>
             <input
               required
+              type="password"
               value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder="API Key do gateway"
+              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none font-mono text-sm"
+              placeholder={form.tipo === 'nxgate' ? 'd6fd1a0ed8daf4b33754d9f7d494d697' : 'API Key do gateway'}
             />
+            {form.tipo === 'nxgate' && (
+              <p className="text-xs text-gray-500">
+                Sua chave secreta (api_key) fornecida pelo NXGate. Esta chave é usada para autenticar todas as requisições.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
@@ -281,6 +377,17 @@ export default function GatewaysPage() {
           </table>
         </div>
       </section>
+
+      {/* Alerta bonito */}
+      {alerta && (
+        <AlertaBonito
+          isOpen={!!alerta}
+          onClose={fecharAlerta}
+          tipo={alerta.tipo}
+          titulo={alerta.titulo}
+          mensagem={alerta.mensagem}
+        />
+      )}
     </div>
   )
 }

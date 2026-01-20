@@ -7,6 +7,7 @@ import {
   buscarAlertasDescarga,
   resolverAlertaDescarga,
   calcularTotalApostadoPorPremio,
+  buscarApostasPorPremio,
 } from '@/lib/descarga'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +43,21 @@ export async function GET(request: NextRequest) {
         ],
       })
       return NextResponse.json({ limites })
+    }
+
+    if (action === 'apostas') {
+      const modalidade = searchParams.get('modalidade')
+      const premio = searchParams.get('premio')
+
+      if (!modalidade || !premio) {
+        return NextResponse.json(
+          { error: 'Parâmetros obrigatórios: modalidade, premio' },
+          { status: 400 }
+        )
+      }
+
+      const apostas = await buscarApostasPorPremio(modalidade, Number(premio))
+      return NextResponse.json({ apostas })
     }
 
     // Retornar limites e alertas

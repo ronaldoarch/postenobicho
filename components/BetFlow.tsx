@@ -8,14 +8,18 @@ import ProgressIndicator from './ProgressIndicator'
 import SpecialQuotationsModal from './SpecialQuotationsModal'
 import ModalitySelection from './ModalitySelection'
 import AnimalSelection from './AnimalSelection'
+import NumberCalculator from './NumberCalculator'
 import PositionAmountDivision from './PositionAmountDivision'
 import LocationSelection from './LocationSelection'
 import BetConfirmation from './BetConfirmation'
 import InstantResultModal from './InstantResultModal'
+import CotacaoAlertaModal from './CotacaoAlertaModal'
+import AlertaBonito from './AlertaBonito'
 
 const INITIAL_BET_DATA: BetData = {
   modality: null,
   animalBets: [],
+  numberBets: [],
   position: null,
   customPosition: false,
   customPositionValue: undefined,
@@ -36,8 +40,37 @@ export default function BetFlow() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [showInstantResult, setShowInstantResult] = useState(false)
   const [instantResult, setInstantResult] = useState<{ prizes: number[]; groups: number[]; premioTotal: number } | null>(null)
+  const [showCotacaoAlerta, setShowCotacaoAlerta] = useState(false)
+  const [cotacaoAlerta, setCotacaoAlerta] = useState<{ tipo: 'milhar' | 'centena'; numero: string; cotacao: number | null } | null>(null)
+  const [pendingPayload, setPendingPayload] = useState<any>(null)
+  const [alertaBonito, setAlertaBonito] = useState<{ tipo: 'sucesso' | 'erro' | 'aviso' | 'info'; titulo: string; mensagem: string } | null>(null)
 
   const MAX_PALPITES = 10
+
+  // Detectar se é modalidade numérica
+  const isNumberModality = useMemo(() => {
+    const modalityName = betData.modalityName || ''
+    const numberModalities = [
+      'Milhar',
+      'Centena',
+      'Dezena',
+      'Milhar Invertida',
+      'Centena Invertida',
+      'Dezena Invertida',
+      'Milhar/Centena',
+      'Milhar Centena',
+      'Duque de Dezena',
+      'Terno de Dezena',
+      'Terno de Dezena Seco',
+      'Quadra de Dezena',
+      'Duque de Dezena EMD',
+      'Duque de Dezena (EMD)',
+      'Terno de Dezena EMD',
+      'Terno de Dezena (EMD)',
+      'Dezeninha',
+    ]
+    return numberModalities.includes(modalityName)
+  }, [betData.modalityName])
 
   const requiredAnimalsPerBet = useMemo(
     () => getRequiredAnimalsPerBet(betData.modalityName || betData.modality),
@@ -45,6 +78,37 @@ export default function BetFlow() {
   )
 
   const animalsValid = betData.animalBets.length > 0 && betData.animalBets.length <= MAX_PALPITES
+  const numbersValid = betData.numberBets.length > 0 && betData.numberBets.length <= MAX_PALPITES
+  const step2Valid = isNumberModality ? numbersValid : animalsValid
+
+  // Carregar dados de repetição de aposta do localStorage ao montar o componente
+  useEffect(() => {
+    try {
+      const dadosRepeticao = localStorage.getItem('repetirAposta')
+      if (dadosRepeticao) {
+        const dados = JSON.parse(dadosRepeticao)
+        localStorage.removeItem('repetirAposta') // Limpar após carregar
+        
+        const dadosCarregados: BetData = {
+          ...INITIAL_BET_DATA,
+          ...dados,
+        }
+        
+        setBetData(dadosCarregados)
+        
+        // Ajustar step inicial baseado nos dados carregados
+        if (dadosCarregados.modality || dadosCarregados.modalityName) {
+          if ((dadosCarregados.animalBets.length > 0 || dadosCarregados.numberBets.length > 0) && dadosCarregados.position) {
+            setCurrentStep(3) // Já tem tudo preenchido
+          } else {
+            setCurrentStep(2) // Tem modalidade, falta palpites
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados de repetição:', error)
+    }
+  }, [])
 
   useEffect(() => {
     const loadMe = async () => {
@@ -66,17 +130,25 @@ export default function BetFlow() {
   }, [])
 
   const handleNext = () => {
-    if (currentStep === 2 && !animalsValid) return
+    if (currentStep === 2 && !step2Valid) return
     
     // Validação de posição no step 3
     if (currentStep === 3) {
       if (!betData.customPosition && !betData.position) {
-        alert('Por favor, selecione uma posição ou marque "Personalizado" e digite uma posição válida.')
+        setAlertaBonito({
+          tipo: 'aviso',
+          titulo: 'Posição Obrigatória',
+          mensagem: 'Por favor, selecione uma posição ou marque "Personalizado" e digite uma posição válida.',
+        })
         return
       }
       
       if (betData.customPosition && (!betData.customPositionValue || betData.customPositionValue.trim() === '')) {
-        alert('Por favor, digite uma posição personalizada (ex: 1-5, 7, 5, etc.).')
+        setAlertaBonito({
+          tipo: 'aviso',
+          titulo: 'Posição Personalizada',
+          mensagem: 'Por favor, digite uma posição personalizada (ex: 1-5, 7, 5, etc.).',
+        })
         return
       }
       
@@ -86,7 +158,11 @@ export default function BetFlow() {
         const isValidFormat = /^\d+(-\d+)?$/.test(cleanedPos)
         
         if (!isValidFormat) {
-          alert('Formato inválido. Use números (ex: 1, 2, 3) ou ranges (ex: 1-5, 2-7).')
+          setAlertaBonito({
+            tipo: 'aviso',
+            titulo: 'Formato Inválido',
+            mensagem: 'Use números (ex: 1, 2, 3) ou ranges (ex: 1-5, 2-7).',
+          })
           return
         }
         
@@ -96,7 +172,11 @@ export default function BetFlow() {
         const secondNum = parts[1] ? parseInt(parts[1], 10) : firstNum
         
         if (firstNum < 1 || firstNum > 7 || secondNum < 1 || secondNum > 7 || firstNum > secondNum) {
-          alert('Posição inválida. Use valores entre 1 e 7. Exemplos: "1-5", "7", "3", "1-7".')
+          setAlertaBonito({
+            tipo: 'aviso',
+            titulo: 'Posição Inválida',
+            mensagem: 'Use valores entre 1 e 7. Exemplos: "1-5", "7", "3", "1-7".',
+          })
           return
         }
       }
@@ -104,8 +184,14 @@ export default function BetFlow() {
     
     const nextStep = currentStep + 1
     if (nextStep >= 3 && !isAuthenticated) {
-      alert('Você precisa estar logado para continuar. Faça login para usar seu saldo.')
-      window.location.href = '/login'
+      setAlertaBonito({
+        tipo: 'info',
+        titulo: 'Login Necessário',
+        mensagem: 'Você precisa estar logado para continuar. Faça login para usar seu saldo.',
+      })
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 2000)
       return
     }
     if (currentStep < 5) {
@@ -133,8 +219,42 @@ export default function BetFlow() {
     }))
   }
 
-  const handleConfirm = () => {
-    const modalityName = MODALITIES.find((m) => String(m.id) === betData.modality)?.name || 'Modalidade'
+  const handleAddNumberBet = (number: string) => {
+    setBetData((prev) => {
+      if (prev.numberBets.length >= MAX_PALPITES) return prev
+      return { ...prev, numberBets: [...prev.numberBets, number] }
+    })
+  }
+
+  const handleRemoveNumberBet = (index: number) => {
+    setBetData((prev) => ({
+      ...prev,
+      numberBets: prev.numberBets.filter((_, i) => i !== index),
+    }))
+  }
+
+  const handleConfirm = async () => {
+    // Usar modalityName se disponível, senão buscar pelo ID
+    // IMPORTANTE: Priorizar sempre modalityName para garantir que a modalidade correta seja salva
+    let modalityName = betData.modalityName
+    
+    if (!modalityName && betData.modality) {
+      // Se não tiver modalityName, buscar pelo ID
+      const modality = MODALITIES.find((m) => String(m.id) === betData.modality)
+      modalityName = modality?.name || 'Modalidade'
+      
+      // Atualizar betData para garantir que modalityName esteja definido
+      setBetData({
+        ...betData,
+        modalityName: modalityName,
+      })
+    }
+    
+    if (!modalityName) {
+      modalityName = 'Modalidade'
+    }
+    
+    // Formatar palpites (animais ou números)
     const animalNames = betData.animalBets
       .map((grp) =>
         grp
@@ -142,26 +262,248 @@ export default function BetFlow() {
           .join('-'),
       )
       .join(' | ')
+    
+    const numberNames = betData.numberBets.join(' | ')
+    const apostaText = isNumberModality 
+      ? `${modalityName}: ${numberNames}`
+      : `${modalityName}: ${animalNames}`
+
+    // Buscar extração selecionada para obter estado e horário
+    let estado: string | null = null
+    let horario: string | null = betData.specialTime || null
+    
+    if (betData.location) {
+      try {
+        const res = await fetch('/api/admin/extracoes')
+        const data = await res.json()
+        const extracao = (data?.extracoes || []).find((e: any) => e.id.toString() === betData.location)
+        if (extracao) {
+          estado = extracao.estado || null
+          if (!horario && extracao.time) {
+            horario = extracao.time
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar extração:', error)
+      }
+    }
+
+    // Calcular retorno previsto baseado na modalidade e posição
+    let retornoPrevisto = 0
+    const hasPalpites = isNumberModality 
+      ? betData.numberBets.length > 0 
+      : betData.animalBets.length > 0
+    if (betData.position && betData.modality && hasPalpites) {
+      try {
+        // Parsear posição (ex: "1-5" ou "7")
+        let pos_from = 1
+        let pos_to = 5
+        
+        if (betData.customPosition && betData.customPositionValue) {
+          const cleanedPos = betData.customPositionValue.replace(/º/g, '').replace(/\s/g, '')
+          const positionParts = cleanedPos.includes('-') 
+            ? cleanedPos.split('-').map(p => parseInt(p.trim()))
+            : [parseInt(cleanedPos.trim()), parseInt(cleanedPos.trim())]
+          
+          if (positionParts.length === 2 && !isNaN(positionParts[0]) && !isNaN(positionParts[1])) {
+            pos_from = positionParts[0]
+            pos_to = positionParts[1]
+          }
+        } else if (betData.position) {
+          const positionParts = betData.position.includes('-') 
+            ? betData.position.split('-').map(p => parseInt(p.trim()))
+            : [parseInt(betData.position.trim()), parseInt(betData.position.trim())]
+          
+          if (positionParts.length === 2 && !isNaN(positionParts[0]) && !isNaN(positionParts[1])) {
+            pos_from = positionParts[0]
+            pos_to = positionParts[1]
+          }
+        }
+        
+        // Mapear nome da modalidade para ModalityType
+        const modalityMap: Record<string, string> = {
+          'Grupo': 'GRUPO',
+          'Dupla de Grupo': 'DUPLA_GRUPO',
+          'Terno de Grupo': 'TERNO_GRUPO',
+          'Quadra de Grupo': 'QUADRA_GRUPO',
+          'Quina de Grupo': 'QUINA_GRUPO',
+          'Dezena': 'DEZENA',
+          'Centena': 'CENTENA',
+          'Milhar': 'MILHAR',
+          'Milhar Invertida': 'MILHAR_INVERTIDA',
+          'Centena Invertida': 'CENTENA_INVERTIDA',
+          'Dezena Invertida': 'DEZENA_INVERTIDA',
+          'Duque de Dezena': 'DUQUE_DEZENA',
+          'Terno de Dezena': 'TERNO_DEZENA',
+          'Terno de Dezena Seco': 'TERNO_DEZENA', // Mesmo tipo que Terno de Dezena
+          'Quadra de Dezena': 'QUADRA_DEZENA',
+          'Duque de Dezena EMD': 'DUQUE_DEZENA_EMD',
+          'Duque de Dezena (EMD)': 'DUQUE_DEZENA_EMD',
+          'Terno de Dezena EMD': 'TERNO_DEZENA_EMD',
+          'Terno de Dezena (EMD)': 'TERNO_DEZENA_EMD',
+          'Passe vai': 'PASSE',
+          'Passe vai e vem': 'PASSE_VAI_E_VEM',
+          'Passe Vai e Vem': 'PASSE_VAI_E_VEM',
+          'Milhar Centena': 'MILHAR_CENTENA',
+          'Dezeninha': 'DEZENINHA',
+          'Terno de Grupo Seco': 'TERNO_GRUPO_SECO',
+        }
+        
+        const modalityType = modalityMap[modalityName] || 'GRUPO'
+        
+        // Usar a mesma lógica de cálculo do sistema de premiação
+        const { buscarOdd, calcularValorPorPalpite, calcularNumero, calcularGrupo } = await import('@/lib/bet-rules-engine')
+        const qtdPalpites = isNumberModality ? betData.numberBets.length : betData.animalBets.length
+        
+        // Calcular valor por palpite usando a mesma função do sistema
+        const valorPorPalpite = calcularValorPorPalpite(
+          betData.amount,
+          qtdPalpites,
+          betData.divisionType
+        )
+        
+        // Buscar odd da modalidade
+        let odd = buscarOdd(modalityType as any, pos_from, pos_to)
+        
+        // Verificar se milhar ou centena está cotada e ajustar odd
+        if (isNumberModality && betData.numberBets.length > 0 && (modalityType === 'MILHAR' || modalityType === 'CENTENA' || modalityType === 'MILHAR_CENTENA')) {
+          const numeroApostado = betData.numberBets[0]
+          const numeroLimpo = numeroApostado.replace(/\D/g, '')
+          
+          try {
+            if (modalityType === 'MILHAR' || modalityType === 'MILHAR_CENTENA') {
+              const milharFormatada = numeroLimpo.padStart(4, '0').slice(-4)
+              const res = await fetch(`/api/cotacao/verificar?tipo=milhar&numero=${milharFormatada}`)
+              const { cotada, cotacao } = await res.json()
+              
+              if (cotada && cotacao !== null && cotacao > 0) {
+                // Usar cotação especial em vez da odd normal
+                odd = cotacao
+              }
+            }
+            
+            if (modalityType === 'CENTENA' || modalityType === 'MILHAR_CENTENA') {
+              const centenaFormatada = numeroLimpo.padStart(4, '0').slice(-3)
+              const res = await fetch(`/api/cotacao/verificar?tipo=centena&numero=${centenaFormatada}`)
+              const { cotada, cotacao } = await res.json()
+              
+              if (cotada && cotacao !== null && cotacao > 0) {
+                // Para MILHAR_CENTENA, usar a maior cotação entre milhar e centena
+                // Para CENTENA, usar a cotação da centena
+                if (modalityType === 'MILHAR_CENTENA') {
+                  odd = Math.max(odd, cotacao)
+                } else {
+                  odd = cotacao
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Erro ao verificar cotação especial:', error)
+            // Continuar com odd normal em caso de erro
+          }
+        }
+        
+        // Calcular unidades e valor unitário (simulando um palpite ganhador)
+        let calculation: any
+        if (modalityType.includes('GRUPO')) {
+          const qtdGrupos = isNumberModality ? 0 : (betData.animalBets[0]?.length || 0)
+          calculation = calcularGrupo(modalityType as any, qtdGrupos, pos_from, pos_to, valorPorPalpite)
+        } else {
+          // Para modalidades numéricas, usar o primeiro número como exemplo
+          const numeroExemplo = isNumberModality ? betData.numberBets[0] : '0000'
+          calculation = calcularNumero(modalityType as any, numeroExemplo, pos_from, pos_to, valorPorPalpite)
+        }
+        
+        // Calcular prêmio por unidade (assumindo que ganhou)
+        const premioUnidade = odd * calculation.unitValue
+        
+        // Retorno previsto = prêmio por unidade * quantidade de unidades que ganhariam * quantidade de palpites
+        // Assumindo que cada palpite ganha 1 vez (hits = 1)
+        const hitsPorPalpite = 1
+        const retornoPorPalpite = hitsPorPalpite * premioUnidade
+        retornoPrevisto = retornoPorPalpite * qtdPalpites
+      } catch (error) {
+        console.error('Erro ao calcular retorno previsto:', error)
+      }
+    }
 
     const payload = {
       concurso: betData.location ? `Extração ${betData.location}` : null,
       loteria: betData.location,
-      estado: undefined,
-      horario: betData.specialTime || null,
+      estado: estado || null,
+      horario: horario,
       dataConcurso: new Date().toISOString(),
       modalidade: modalityName,
-      aposta: `${modalityName}: ${animalNames}`,
+      aposta: apostaText,
       valor: betData.amount,
-      retornoPrevisto: 0,
+      retornoPrevisto: retornoPrevisto,
       status: 'pendente',
       useBonus: betData.useBonus,
       detalhes: {
         betData,
         modalityName,
-        animalNames,
+        animalNames: isNumberModality ? undefined : animalNames,
+        numberNames: isNumberModality ? numberNames : undefined,
+        isNumberModality,
       },
     }
 
+    // Verificar se há milhar ou centena cotada antes de finalizar
+    if (isNumberModality && betData.numberBets.length > 0) {
+      for (const numeroApostado of betData.numberBets) {
+        const numeroLimpo = numeroApostado.replace(/\D/g, '')
+        
+        // Verificar milhar cotada
+        if (modalityName === 'Milhar' || modalityName === 'Milhar Invertida' || modalityName === 'Milhar/Centena' || modalityName === 'Milhar Centena') {
+          const milharFormatada = numeroLimpo.padStart(4, '0').slice(-4)
+          try {
+            const res = await fetch(`/api/cotacao/verificar?tipo=milhar&numero=${milharFormatada}`)
+            const { cotada, cotacao } = await res.json()
+            
+            if (cotada) {
+              setCotacaoAlerta({
+                tipo: 'milhar',
+                numero: milharFormatada,
+                cotacao,
+              })
+              setPendingPayload(payload)
+              setShowCotacaoAlerta(true)
+              return // Não finaliza ainda, aguarda confirmação do usuário
+            }
+          } catch (error) {
+            console.error('Erro ao verificar milhar cotada:', error)
+          }
+        }
+        
+        // Verificar centena cotada
+        if (modalityName === 'Centena' || modalityName === 'Centena Invertida' || modalityName === 'Milhar/Centena' || modalityName === 'Milhar Centena') {
+          const centenaFormatada = numeroLimpo.padStart(3, '0').slice(-3)
+          try {
+            const res = await fetch(`/api/cotacao/verificar?tipo=centena&numero=${centenaFormatada}`)
+            const { cotada, cotacao } = await res.json()
+            
+            if (cotada) {
+              setCotacaoAlerta({
+                tipo: 'centena',
+                numero: centenaFormatada,
+                cotacao,
+              })
+              setPendingPayload(payload)
+              setShowCotacaoAlerta(true)
+              return // Não finaliza ainda, aguarda confirmação do usuário
+            }
+          } catch (error) {
+            console.error('Erro ao verificar centena cotada:', error)
+          }
+        }
+      }
+    }
+
+    // Se não há cotação ou usuário já confirmou, finaliza a aposta
+    submitBet(payload)
+  }
+
+  const submitBet = async (payload: any) => {
     fetch('/api/apostas', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -182,17 +524,46 @@ export default function BetFlow() {
           })
           setShowInstantResult(true)
         } else {
-          alert('Aposta registrada com sucesso!')
+          setAlertaBonito({
+            tipo: 'sucesso',
+            titulo: 'Aposta Registrada!',
+            mensagem: 'Sua aposta foi registrada com sucesso. Boa sorte!',
+          })
         }
+        // Resetar dados após sucesso
+        setBetData(INITIAL_BET_DATA)
+        setCurrentStep(1)
       })
       .catch((err) => {
         const msg = err.message || 'Erro ao registrar aposta'
         if (msg.toLowerCase().includes('saldo insuficiente')) {
-          alert('Saldo insuficiente. Verifique seu saldo e bônus disponíveis.')
+          setAlertaBonito({
+            tipo: 'erro',
+            titulo: 'Saldo Insuficiente',
+            mensagem: 'Verifique seu saldo e bônus disponíveis antes de apostar.',
+          })
         } else {
-          alert(msg)
+          setAlertaBonito({
+            tipo: 'erro',
+            titulo: 'Erro ao Registrar Aposta',
+            mensagem: msg,
+          })
         }
       })
+  }
+
+  const handleConfirmCotacao = () => {
+    setShowCotacaoAlerta(false)
+    if (pendingPayload) {
+      submitBet(pendingPayload)
+      setPendingPayload(null)
+    }
+  }
+
+  const handleCancelCotacao = () => {
+    setShowCotacaoAlerta(false)
+    setCotacaoAlerta(null)
+    setPendingPayload(null)
   }
 
   const renderStep = () => {
@@ -235,6 +606,7 @@ export default function BetFlow() {
                     modality: modalityId,
                     modalityName,
                     animalBets: [], // limpa palpites ao trocar modalidade
+                    numberBets: [], // limpa palpites numéricos ao trocar modalidade
                   }))
                 }
                 onSpecialQuotationsClick={() => setShowSpecialModal(true)}
@@ -249,7 +621,15 @@ export default function BetFlow() {
         )
 
       case 2:
-        return (
+        return isNumberModality ? (
+          <NumberCalculator
+            numberBets={betData.numberBets}
+            modalityName={betData.modalityName || ''}
+            maxPalpites={MAX_PALPITES}
+            onAddBet={handleAddNumberBet}
+            onRemoveBet={handleRemoveNumberBet}
+          />
+        ) : (
           <AnimalSelection
             animalBets={betData.animalBets}
             requiredPerBet={requiredAnimalsPerBet}
@@ -340,7 +720,7 @@ export default function BetFlow() {
             onClick={handleNext}
             disabled={
               (currentStep === 1 && !betData.modality && activeTab === 'bicho') ||
-              (currentStep === 2 && !animalsValid) ||
+              (currentStep === 2 && !step2Valid) ||
               (currentStep >= 2 && isAuthenticated === false) ||
               (currentStep === 3 && !betData.customPosition && !betData.position) ||
               (currentStep === 3 && betData.customPosition && (!betData.customPositionValue || betData.customPositionValue.trim() === ''))
@@ -361,6 +741,29 @@ export default function BetFlow() {
         }}
         resultado={instantResult}
       />
+
+      {/* Modal de alerta de cotação */}
+      {cotacaoAlerta && (
+        <CotacaoAlertaModal
+          isOpen={showCotacaoAlerta}
+          onClose={handleCancelCotacao}
+          onConfirm={handleConfirmCotacao}
+          tipo={cotacaoAlerta.tipo}
+          numero={cotacaoAlerta.numero}
+          cotacao={cotacaoAlerta.cotacao}
+        />
+      )}
+
+      {/* Alerta bonito genérico */}
+      {alertaBonito && (
+        <AlertaBonito
+          isOpen={!!alertaBonito}
+          onClose={() => setAlertaBonito(null)}
+          tipo={alertaBonito.tipo}
+          titulo={alertaBonito.titulo}
+          mensagem={alertaBonito.mensagem}
+        />
+      )}
     </div>
   )
 }
