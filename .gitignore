@@ -36,3 +36,11 @@ next-env.d.ts
 public/uploads/
 
 /lib/generated/prisma
+
+# build files
+build.tar.gz
+build-deploy-*.tar.gz
+
+# database
+prisma/dev.db
+prisma/dev.db-journal
