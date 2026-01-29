@@ -45,20 +45,20 @@ export async function GET(request: NextRequest) {
     const cotacoes = await prisma.cotacao.findMany({
       where,
       include: {
-        modalidade: {
+        Modalidade: {
           select: {
             id: true,
             name: true,
           },
         },
-        extracao: {
+        Extracao: {
           select: {
             id: true,
             name: true,
             time: true,
           },
         },
-        promocao: {
+        Promocao: {
           select: {
             id: true,
             titulo: true,
@@ -132,22 +132,23 @@ export async function POST(request: NextRequest) {
         promocaoId: promocaoId ? parseInt(promocaoId) : null,
         isSpecial: isSpecial === true || isSpecial === 'true',
         active: active !== undefined ? active : true,
+        updatedAt: new Date(),
       },
       include: {
-        modalidade: {
+        Modalidade: {
           select: {
             id: true,
             name: true,
           },
         },
-        extracao: {
+        Extracao: {
           select: {
             id: true,
             name: true,
             time: true,
           },
         },
-        promocao: {
+        Promocao: {
           select: {
             id: true,
             titulo: true,
@@ -227,20 +228,20 @@ export async function PUT(request: NextRequest) {
       where: { id: parseInt(id) },
       data: updateData,
       include: {
-        modalidade: {
+        Modalidade: {
           select: {
             id: true,
             name: true,
           },
         },
-        extracao: {
+        Extracao: {
           select: {
             id: true,
             name: true,
             time: true,
           },
         },
-        promocao: {
+        Promocao: {
           select: {
             id: true,
             titulo: true,

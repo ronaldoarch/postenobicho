@@ -185,6 +185,7 @@ function parsearHTML(html: string, codigoLoteria: string): BichoCertoResultado[]
   }
   
   // 2. Identificar divs de resultados (padrão: div_display_XX)
+  // IMPORTANTE: Aceitar tanto IDs de um dígito (9) quanto dois dígitos (09)
   const divRegex = /<div[^>]*id=["']div_display_(\d+)["'][^>]*>/gi
   const divsEncontradas: number[] = []
   let match
@@ -196,15 +197,43 @@ function parsearHTML(html: string, codigoLoteria: string): BichoCertoResultado[]
     }
   }
   
-  console.log(`🔍 Encontradas ${divsEncontradas.length} divs com div_display_`)
+  // Também buscar divs com zero à esquerda (div_display_09)
+  const div09Regex = /<div[^>]*id=["']div_display_0(\d)["'][^>]*>/gi
+  while ((match = div09Regex.exec(htmlLimpo)) !== null) {
+    const horarioId = parseInt(match[1], 10)
+    if (!divsEncontradas.includes(horarioId)) {
+      divsEncontradas.push(horarioId)
+      console.log(`✅ Encontrada div_display_0${horarioId} (com zero à esquerda)`)
+    }
+  }
+  
+  // Ordenar por ID para facilitar debug
+  divsEncontradas.sort((a, b) => a - b)
+  
+  console.log(`🔍 Encontradas ${divsEncontradas.length} divs com div_display_: [${divsEncontradas.join(', ')}]`)
+  console.log(`🔍 Código da loteria: ${codigoLoteria}`)
+  
+  // Verificar se há div_9 mas não está sendo processada (especialmente para RJ)
+  if (codigoLoteria === 'rj' && !divsEncontradas.includes(9)) {
+    console.warn(`⚠️ ATENÇÃO: Para RJ, div_9 não foi encontrada! Divs encontradas: [${divsEncontradas.join(', ')}]`)
+    console.warn(`⚠️ Isso pode significar que o horário das 9:20 não está disponível no bichocerto.com para esta data`)
+    
+    // Verificar se há menção a "9:20" ou "09:20" no HTML
+    if (htmlLimpo.includes('9:20') || htmlLimpo.includes('09:20') || htmlLimpo.includes('9h20')) {
+      console.warn(`⚠️ Mas há menção a 9:20 no HTML! Pode estar em formato diferente`)
+    }
+  }
   
   // 3. Extrair resultados de cada div
   for (const horarioId of divsEncontradas) {
     try {
+      console.log(`🔍 Processando div_display_${horarioId}...`)
       const resultado = extrairPremiosDaTabela(htmlLimpo, horarioId, codigoLoteria)
       if (resultado && resultado.premios.length > 0) {
         resultados.push(resultado)
-        console.log(`📊 Div ${horarioId}: ${resultado.premios.length} prêmio(s) extraído(s)`)
+        console.log(`✅ Div ${horarioId} (${resultado.horario}): ${resultado.premios.length} prêmio(s) extraído(s) - Título: "${resultado.titulo}"`)
+      } else {
+        console.warn(`⚠️ Div ${horarioId}: Nenhum prêmio extraído ou resultado vazio`)
       }
     } catch (error) {
       console.error(`❌ Erro ao processar div ${horarioId}:`, error)
@@ -228,6 +257,7 @@ function extrairPremiosDaTabela(
   codigoLoteria: string
 ): BichoCertoResultado | null {
   // Buscar título do resultado (dentro da div)
+  // IMPORTANTE: Aceitar tanto div_display_9 quanto div_display_09
   const tituloRegex = new RegExp(
     `<div[^>]*id=["']div_display_${horarioId}["'][^>]*>([\\s\\S]*?)<h5[^>]*>([^<]+)</h5>`,
     'i'
@@ -235,24 +265,87 @@ function extrairPremiosDaTabela(
   const tituloMatch = html.match(tituloRegex)
   const titulo = tituloMatch ? tituloMatch[2].trim() : `Resultado ${codigoLoteria.toUpperCase()} ${horarioId}`
   
-  // Extrair horário do título (formato: "16:30")
-  const horarioMatch = titulo.match(/(\d{1,2}):(\d{2})/)
-  const horario = horarioMatch ? `${horarioMatch[1].padStart(2, '0')}:${horarioMatch[2]}` : `${horarioId}:00`
+  console.log(`  📝 Título encontrado para div_${horarioId}: "${titulo}"`)
+  
+  // Extrair horário do título (formato: "16:30" ou "9:20")
+  // Tentar múltiplos padrões: "9:20", "09:20", "9h20", "09h20"
+  let horarioMatch = titulo.match(/(\d{1,2}):(\d{2})/)
+  if (!horarioMatch) {
+    horarioMatch = titulo.match(/(\d{1,2})h(\d{2})/)
+  }
+  
+  const horario = horarioMatch 
+    ? `${horarioMatch[1].padStart(2, '0')}:${horarioMatch[2]}` 
+    : `${String(horarioId).padStart(2, '0')}:00`
+  
+  console.log(`  ⏰ Horário extraído: "${horario}" (do título: "${titulo}")`)
   
   // Buscar tabela correspondente
-  const tableRegex = new RegExp(
+  // IMPORTANTE: Aceitar tanto table_9 quanto table_09
+  let tableRegex = new RegExp(
     `<table[^>]*id=["']table_${horarioId}["'][^>]*>([\\s\\S]*?)</table>`,
     'i'
   )
-  const tableMatch = html.match(tableRegex)
+  let tableMatch = html.match(tableRegex)
+  
+  // Se não encontrou e horarioId é 9, tentar table_09
+  if (!tableMatch && horarioId === 9) {
+    console.log(`  🔍 Tentando buscar table_09 (com zero à esquerda) para div_9`)
+    tableRegex = new RegExp(
+      `<table[^>]*id=["']table_09["'][^>]*>([\\s\\S]*?)</table>`,
+      'i'
+    )
+    tableMatch = html.match(tableRegex)
+  }
   
   if (!tableMatch) {
-    console.warn(`⚠️ Tabela table_${horarioId} não encontrada`)
+    console.warn(`⚠️ Tabela table_${horarioId} não encontrada para div_display_${horarioId}`)
+    // Tentar buscar sem o ID específico (fallback) - buscar tabela dentro da div
+    const tableRegexFallback = new RegExp(
+      `<div[^>]*id=["']div_display_${horarioId}["'][^>]*>([\\s\\S]*?)<table[^>]*>([\\s\\S]*?)</table>`,
+      'i'
+    )
+    let fallbackMatch = html.match(tableRegexFallback)
+    
+    // Se não encontrou e horarioId é 9, tentar div_display_09
+    if (!fallbackMatch && horarioId === 9) {
+      console.log(`  🔍 Tentando buscar tabela dentro de div_display_09`)
+      const tableRegexFallback09 = new RegExp(
+        `<div[^>]*id=["']div_display_09["'][^>]*>([\\s\\S]*?)<table[^>]*>([\\s\\S]*?)</table>`,
+        'i'
+      )
+      fallbackMatch = html.match(tableRegexFallback09)
+    }
+    
+    if (fallbackMatch && fallbackMatch[2]) {
+      console.log(`  ✅ Tabela encontrada via fallback para div_${horarioId}`)
+      const tableContent = fallbackMatch[2]
+      // Continuar com a extração usando tableContent
+      return extrairPremiosDaTabelaContent(tableContent, horario, titulo)
+    }
+    
+    // Log adicional para debug
+    console.log(`  🔍 HTML ao redor de div_display_${horarioId}:`, html.substring(
+      html.indexOf(`div_display_${horarioId}`) - 100,
+      html.indexOf(`div_display_${horarioId}`) + 500
+    ).substring(0, 200))
+    
     return null
   }
   
   const tableContent = tableMatch[1]
   
+  return extrairPremiosDaTabelaContent(tableContent, horario, titulo)
+}
+
+/**
+ * Extrai prêmios do conteúdo de uma tabela
+ */
+function extrairPremiosDaTabelaContent(
+  tableContent: string,
+  horario: string,
+  titulo: string
+): BichoCertoResultado | null {
   // Extrair linhas da tabela (<tr>)
   const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
   const premios: BichoCertoPremio[] = []

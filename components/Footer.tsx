@@ -57,11 +57,6 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="flex w-full justify-center pb-14 lg:pb-0">
-        <div className="flex items-center justify-center">
-          <span className="text-6xl">🦁</span>
-        </div>
-      </div>
     </footer>
   )
 }

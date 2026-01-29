@@ -36,9 +36,17 @@ export default function PerfilPage() {
     loadUserData()
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     if (confirm('Tem certeza que deseja sair?')) {
-      // Implementar logout
+      try {
+        await fetch('/api/auth/logout', { 
+          method: 'POST',
+          credentials: 'include',
+        })
+      } catch (error) {
+        console.error('Erro ao fazer logout:', error)
+      }
+      // Redirecionar mesmo se houver erro
       window.location.href = '/'
     }
   }

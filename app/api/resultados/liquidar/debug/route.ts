@@ -4,6 +4,9 @@ import { extracoes } from '@/data/extracoes'
 import { getHorarioRealApuracao, temSorteioNoDia } from '@/data/horarios-reais-apuracao'
 import { buscarResultadosPorNome } from '@/lib/bichocerto-parser'
 
+// Marcar como rota dinâmica (não pode ser pré-renderizada estaticamente)
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/resultados/liquidar/debug
  * 
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest) {
     let todasApostasPendentes = await prisma.aposta.findMany({
       where,
       include: {
-        usuario: {
+        Usuario: {
           select: {
             id: true,
             nome: true,
@@ -102,9 +105,9 @@ export async function GET(request: NextRequest) {
           valor: aposta.valor,
           modalidade: (aposta.detalhes as any)?.modality || 'N/A',
                 usuario: {
-                  id: aposta.usuario.id,
-                  nome: aposta.usuario.nome,
-                  saldo: aposta.usuario.saldo,
+                  id: aposta.Usuario.id,
+                  nome: aposta.Usuario.nome,
+                  saldo: aposta.Usuario.saldo,
                 },
         }
       }),

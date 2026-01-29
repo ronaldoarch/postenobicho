@@ -5,15 +5,26 @@ import { useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import BottomNav from '@/components/BottomNav'
+import { useMetaTracking } from '@/hooks/useMetaTracking'
 
 export default function CadastroPage() {
   const router = useRouter()
+  const { trackRegistration } = useMetaTracking()
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
+  const [cpf, setCpf] = useState('')
   const [telefone, setTelefone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const formatCPF = (value: string) => {
+    const cleaned = value.replace(/\D/g, '')
+    if (cleaned.length <= 11) {
+      return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4').replace(/(\d{3})(\d{3})(\d{3})/, '$1.$2.$3').replace(/(\d{3})(\d{3})/, '$1.$2')
+    }
+    return value
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,13 +34,15 @@ export default function CadastroPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nome, email, telefone, password }),
+        body: JSON.stringify({ nome, email, cpf, telefone, password }),
       })
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao cadastrar')
       }
-      router.push('/minhas-apostas')
+      // Rastrear cadastro no Meta Pixel
+      trackRegistration()
+      router.push('/')
     } catch (err: any) {
       setError(err.message || 'Erro ao cadastrar')
     } finally {
@@ -40,7 +53,7 @@ export default function CadastroPage() {
   return (
     <div className="flex min-h-screen flex-col bg-gray-scale-100">
       <Header />
-      <main className="flex flex-1 items-center justify-center px-4 py-8">
+      <main className="flex flex-1 items-center justify-center px-4 py-8 pt-24">
         <div className="w-full max-w-md rounded-xl bg-white p-6 shadow">
           <h1 className="mb-4 text-2xl font-bold text-gray-900">Cadastro</h1>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -63,6 +76,19 @@ export default function CadastroPage() {
                 required
                 className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue focus:outline-none"
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-gray-700">CPF</label>
+              <input
+                type="text"
+                value={cpf}
+                onChange={(e) => setCpf(formatCPF(e.target.value))}
+                placeholder="000.000.000-00"
+                maxLength={14}
+                required
+                className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-500">Apenas uma conta por CPF é permitida</p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-gray-700">Telefone</label>

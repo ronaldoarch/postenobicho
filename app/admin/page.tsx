@@ -15,6 +15,10 @@ interface DashboardStats {
   qtdApostas: number
   premiosPagos: number
   receitaLiquida: number
+  totalPagamentosPix: number
+  qtdPagamentosPix: number
+  ggr: number
+  ggrPercentual: number
 }
 
 interface DashboardDetalhes {
@@ -45,6 +49,10 @@ export default function AdminDashboard() {
     qtdApostas: 0,
     premiosPagos: 0,
     receitaLiquida: 0,
+    totalPagamentosPix: 0,
+    qtdPagamentosPix: 0,
+    ggr: 0,
+    ggrPercentual: 0,
   })
   const [detalhes, setDetalhes] = useState<DashboardDetalhes>({
     apostasPorStatus: { pendente: 0, ganhou: 0, perdeu: 0, liquidado: 0 },
@@ -227,6 +235,18 @@ export default function AdminDashboard() {
             <div class="stat-card">
               <div class="stat-label">Receita Líquida</div>
               <div class="stat-value ${stats.receitaLiquida >= 0 ? 'positive' : 'negative'}">${formatCurrency(stats.receitaLiquida)}</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">Pagamentos de Gerentes</div>
+              <div class="stat-value positive">${formatCurrency(stats.totalPagamentosPix)}</div>
+              <div class="stat-subtitle">${stats.qtdPagamentosPix} pagamento(s)</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-label">GGR (Gross Gaming Revenue)</div>
+              <div class="stat-value positive">${formatCurrency(stats.ggr)}</div>
+              <div class="stat-subtitle">${stats.ggrPercentual.toFixed(2)}% do total apostado</div>
             </div>
           </div>
 
@@ -422,6 +442,26 @@ export default function AdminDashboard() {
               <p className={`text-3xl font-bold ${stats.receitaLiquida >= 0 ? 'text-yellow-500' : 'text-red-500'}`}>
                 {formatCurrency(stats.receitaLiquida)}
               </p>
+            </div>
+
+            {/* Pagamentos de Gerentes */}
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-600 text-sm">Pagamentos de Gerentes</p>
+                <span className="text-2xl">💸</span>
+              </div>
+              <p className="text-3xl font-bold text-green-600">{formatCurrency(stats.totalPagamentosPix)}</p>
+              <p className="text-sm text-gray-500 mt-1">{stats.qtdPagamentosPix} pagamento(s)</p>
+            </div>
+
+            {/* GGR (Gross Gaming Revenue) */}
+            <div className="bg-white rounded-xl shadow-md p-6 border-l-4 border-indigo-500">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-gray-600 text-sm">GGR (Gross Gaming Revenue)</p>
+                <span className="text-2xl">📈</span>
+              </div>
+              <p className="text-3xl font-bold text-indigo-600">{formatCurrency(stats.ggr)}</p>
+              <p className="text-sm text-gray-500 mt-1">{stats.ggrPercentual.toFixed(2)}% do total apostado</p>
             </div>
           </div>
 

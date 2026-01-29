@@ -14,7 +14,11 @@ import { ResultadoItem } from '@/types/resultados'
 import { verificarMilharCotada, verificarCentenaCotada, extrairCentena } from '@/lib/cotacao'
 import { extracoes, type Extracao } from '@/data/extracoes'
 import { getHorarioRealApuracao, temSorteioNoDia } from '@/data/horarios-reais-apuracao'
-import { buscarResultadosPorNome } from '@/lib/bichocerto-parser'
+// API antiga desativada - usando nova API do PosteNoBicho
+// import { buscarResultadosPorNome } from '@/lib/bichocerto-parser'
+// import { buscarResultadosRJ } from '@/lib/bichocerto-verificador-rj'
+import { buscarResultadosRJPosteNoBicho, buscarResultadoFederalPosteNoBicho } from '@/lib/postenobicho-api-parser'
+import { WebhookTracker } from '@/lib/webhook-tracker'
 
 /**
  * GET /api/resultados/liquidar
@@ -93,7 +97,11 @@ function jaPassouHorarioApuracao(
       horarioReal = getHorarioRealApuracao(nomeExtracao, horarioExtracao)
       
       if (horarioReal) {
-        startTimeParaUsar = horarioReal.startTimeReal || horarioReal.closeTimeReal
+        // Usar horário de apuração real, mas ajustar para :30 (30 minutos após o horário)
+        const [horasClose, minutosClose] = horarioReal.closeTimeReal.split(':').map(Number)
+        // Horário de início de busca: 30 minutos após o closeTime (ex: 09:10 -> 09:40, mas queremos 09:30)
+        // Então pegamos a hora e colocamos :30
+        startTimeParaUsar = `${horasClose.toString().padStart(2, '0')}:30`
         closeTimeParaUsar = horarioReal.closeTimeReal
         
         const diaSemana = dataConcurso.getDay()
@@ -103,10 +111,20 @@ function jaPassouHorarioApuracao(
           return false
         }
       } else {
-        console.log(`⚠️ Horário real não encontrado para ${nomeExtracao} ${horarioExtracao}, usando horário interno`)
+        // Se não encontrou horário real, usar horário interno mas ajustar para :30
+        const [horasClose, minutosClose] = (extracao.closeTime || extracao.time || '').split(':').map(Number)
+        if (!isNaN(horasClose)) {
+          startTimeParaUsar = `${horasClose.toString().padStart(2, '0')}:30`
+        }
+        console.log(`⚠️ Horário real não encontrado para ${nomeExtracao} ${horarioExtracao}, usando horário interno ajustado para :30`)
       }
     } catch (error) {
       console.log(`⚠️ Erro ao buscar horário real: ${error}, usando horário interno`)
+      // Fallback: ajustar para :30
+      const [horasClose, minutosClose] = (extracao.closeTime || extracao.time || '').split(':').map(Number)
+      if (!isNaN(horasClose)) {
+        startTimeParaUsar = `${horasClose.toString().padStart(2, '0')}:30`
+      }
     }
   }
   
@@ -215,6 +233,8 @@ export async function POST(request: NextRequest) {
     // Verificar se a liquidação automática está ativa
     const configuracoes = await prisma.configuracao.findFirst()
     if (configuracoes && !configuracoes.liquidacaoAutomatica) {
+      console.log('🚫 Liquidação automática está DESATIVADA nas configurações do admin')
+      console.log('   Para ativar, vá em Admin > Configurações > Liquidação Automática')
       return NextResponse.json({
         message: 'Liquidação automática está desativada',
         processadas: 0,
@@ -223,6 +243,8 @@ export async function POST(request: NextRequest) {
         desativada: true,
       }, { status: 200 })
     }
+    
+    console.log('✅ Liquidação automática está ATIVADA - Processando apostas...')
 
     const body = await request.json().catch(() => ({}))
     const { loteria, dataConcurso, horario, usarMonitor = false } = body
@@ -296,11 +318,35 @@ export async function POST(request: NextRequest) {
     console.log(`📊 Total de apostas pendentes: ${todasApostasPendentes.length}, do RJ: ${apostasPendentes.length}`)
 
     if (apostasPendentes.length === 0) {
+      // Verificar por que não há apostas para processar
+      const apostasSemLoteria = todasApostasPendentes.filter(a => !a.loteria).length
+      const apostasForaRJ = todasApostasPendentes.filter(a => {
+        if (!a.loteria) return false
+        const extracaoId = parseInt(a.loteria, 10)
+        const extracao = !isNaN(extracaoId)
+          ? extracoes.find((e) => e.id === extracaoId)
+          : extracoes.find((e) => e.name.toLowerCase() === a.loteria?.toLowerCase() || '')
+        return extracao?.estado !== 'RJ'
+      }).length
+
       return NextResponse.json({
-        message: 'Nenhuma aposta pendente encontrada',
+        message: 'Nenhuma aposta pendente encontrada para processar',
         processadas: 0,
         liquidadas: 0,
         premioTotal: 0,
+        debug: {
+          totalApostasPendentes: todasApostasPendentes.length,
+          apostasSemLoteria,
+          apostasForaRJ,
+          apostasDoRJ: apostasPendentes.length,
+          motivo: todasApostasPendentes.length === 0 
+            ? 'Nenhuma aposta pendente no banco de dados'
+            : apostasSemLoteria > 0
+            ? `${apostasSemLoteria} apostas sem loteria configurada`
+            : apostasForaRJ > 0
+            ? `${apostasForaRJ} apostas de estados diferentes de RJ (apenas RJ é processado)`
+            : 'Todas as apostas pendentes foram filtradas'
+        },
       })
     }
 
@@ -365,30 +411,58 @@ export async function POST(request: NextRequest) {
             return []
           }
           
-          // Buscar resultados do bichocerto.com apenas para RJ
-          const resultadosBichoCerto = await buscarResultadosPorNome(extracao.name, data)
+          // Buscar resultados da nova API do PosteNoBicho
+          // Para RJ: buscar horários 09, 11, 14, 16, 18, 21
+          // Para Federal: buscar horário 18
+          let resultadosConvertidos: ResultadoItem[] = []
           
-          // Converter para formato ResultadoItem
-          const resultadosConvertidos: ResultadoItem[] = []
-          
-          resultadosBichoCerto.forEach(resultadoBichoCerto => {
-            resultadoBichoCerto.premios.forEach(premio => {
-              resultadosConvertidos.push({
-                position: premio.posicao,
-                posicao: parseInt(premio.posicao.replace(/\D/g, ''), 10),
-                milhar: premio.numero,
-                grupo: premio.grupo,
-                animal: premio.animal,
-                drawTime: resultadoBichoCerto.horario,
-                horario: resultadoBichoCerto.horario,
-                loteria: extracao.name,
-                date: data,
-                dataExtracao: data,
-                estado: extracao.estado,
-                fonte: 'bichocerto.com',
+          if (extracao.estado === 'RJ') {
+            // Buscar todos os horários do RJ para a data
+            const resultadosRJ = await buscarResultadosRJPosteNoBicho(data)
+            
+            resultadosRJ.forEach(resultado => {
+              resultado.premios.forEach(premio => {
+                // Usar dados diretamente do JSON - grupo vem da API
+                resultadosConvertidos.push({
+                  position: `${premio.posicao}º`,
+                  posicao: premio.posicao,
+                  milhar: premio.milhar, // Manter como vem da API
+                  grupo: premio.grupo || '', // Grupo que vem da API (ex: "20", "18", "05")
+                  animal: premio.animal,
+                  drawTime: resultado.horario,
+                  horario: resultado.horario,
+                  loteria: extracao.name,
+                  date: data,
+                  dataExtracao: data,
+                  estado: extracao.estado,
+                  fonte: 'api.postenobicho.com',
+                })
               })
             })
-          })
+          } else if (extracao.name.toUpperCase().includes('FEDERAL')) {
+            // Buscar resultado da Federal (horário 18)
+            const resultadoFederal = await buscarResultadoFederalPosteNoBicho(data)
+            
+            if (resultadoFederal) {
+              resultadoFederal.premios.forEach(premio => {
+                // Usar dados diretamente do JSON - grupo vem da API
+                resultadosConvertidos.push({
+                  position: `${premio.posicao}º`,
+                  posicao: premio.posicao,
+                  milhar: premio.milhar, // Manter como vem da API
+                  grupo: premio.grupo || '', // Grupo que vem da API
+                  animal: premio.animal,
+                  drawTime: resultadoFederal.horario,
+                  horario: resultadoFederal.horario,
+                  loteria: extracao.name,
+                  date: data,
+                  dataExtracao: data,
+                  estado: extracao.estado,
+                  fonte: 'api.postenobicho.com',
+                })
+              })
+            }
+          }
           
           return resultadosConvertidos
         } catch (error) {
@@ -408,10 +482,14 @@ export async function POST(request: NextRequest) {
 
     if (resultados.length === 0) {
       return NextResponse.json({
-        message: 'Nenhum resultado oficial encontrado',
+        message: 'Nenhum resultado oficial encontrado para as apostas pendentes',
         processadas: 0,
         liquidadas: 0,
         premioTotal: 0,
+        debug: {
+          apostasPendentes: apostasPendentes.length,
+          motivo: 'Não foi possível buscar resultados oficiais do bichocerto.com para as datas das apostas',
+        },
       })
     }
 
@@ -466,7 +544,7 @@ export async function POST(request: NextRequest) {
         const horarioApostaInicial = aposta.horario && aposta.horario !== 'null' ? aposta.horario : null
         
         if (!jaPassouHorarioApuracao(extracaoId, aposta.dataConcurso, horarioApostaInicial)) {
-          console.log(`⏸️  Pulando aposta ${aposta.id} - aguardando apuração`)
+          console.log(`⏸️  Pulando aposta ${aposta.id} - aguardando apuração (horário ainda não passou)`)
           continue // Pular esta aposta
         }
 
@@ -747,13 +825,31 @@ export async function POST(request: NextRequest) {
                   resultadosDoHorario = resultados
                   break
                 }
-              }
-              if (resultadosDoHorario.length > 0) break
+            }
+            if (resultadosDoHorario.length > 0) break
+          }
+        }
+
+        // Nova Estratégia: Match por Hora (ex: "11:20" matcha "11:00")
+        // Resolve o problema onde a API retorna "11:00" e a aposta é "11:20"
+        if (resultadosDoHorario.length === 0 && horarioAposta) {
+          const horaAposta = horarioAposta.split(':')[0] // "11"
+          
+          for (const [horarioKey, resultados] of Array.from(resultadosPorHorario.entries())) {
+            const horarioKeyOnly = horarioKey.split('|')[1] || horarioKey // "11:00"
+            const horaResult = horarioKeyOnly.split(':')[0] // "11"
+            
+            if (horaAposta === horaResult) {
+              horarioSelecionado = horarioKey
+              resultadosDoHorario = resultados
+              console.log(`✅ Match por hora: Aposta ${horarioAposta} -> Resultado ${horarioKeyOnly}`)
+              break
             }
           }
+        }
           
-          // Fallback: usar o horário com mais resultados (geralmente é o mais recente)
-          if (resultadosDoHorario.length === 0) {
+        // Fallback: usar o horário com mais resultados (geralmente é o mais recente)
+        if (resultadosDoHorario.length === 0) {
             let maxResultados = 0
             for (const [horarioKey, resultados] of Array.from(resultadosPorHorario.entries())) {
               if (resultados.length > maxResultados) {
@@ -790,12 +886,36 @@ export async function POST(request: NextRequest) {
         }
 
         // Converter para lista de milhares (formato esperado pelo motor)
-        const milhares = resultadosOrdenados.map((r) => {
-          const milharStr = (r.milhar || '0000').replace(/\D/g, '') // Remove não-dígitos
-          return parseInt(milharStr.padStart(4, '0').slice(-4)) // Garante 4 dígitos
+        // IMPORTANTE: Para RJ, 6º e 7º prêmios são centenas (últimos 3 dígitos)
+        // Usar dados diretamente do JSON sem adicionar zeros
+        const isRJ = aposta.loteria && (
+          aposta.loteria.toUpperCase().includes('RIO') || 
+          aposta.loteria.toUpperCase().includes('RJ')
+        )
+        
+        const milhares = resultadosOrdenados.map((r, index) => {
+          const milharStr = (r.milhar || '0').replace(/\D/g, '') // Remove não-dígitos
+          let milharNum = parseInt(milharStr, 10)
+          
+          // Para RJ: 6º e 7º prêmios são centenas (últimos 3 dígitos)
+          // Mas manter o número como vem da API (sem padding)
+          if (isRJ && (index === 5 || index === 6)) {
+            // Pegar apenas os últimos 3 dígitos (centena)
+            milharNum = milharNum % 1000
+          }
+          
+          return milharNum
         })
 
-        const grupos = milhares.map((m) => {
+        const grupos = milhares.map((m, index) => {
+          // Para RJ: 6º e 7º prêmios são centenas, então usar centena para calcular grupo
+          if (isRJ && (index === 5 || index === 6)) {
+            const centena = m % 1000
+            const dezena = centena % 100
+            if (dezena === 0) return 25
+            return Math.floor((dezena - 1) / 4) + 1
+          }
+          
           const dezena = m % 100
           if (dezena === 0) return 25
           return Math.floor((dezena - 1) / 4) + 1
@@ -829,13 +949,15 @@ export async function POST(request: NextRequest) {
         const betData = detalhes.betData as {
           modality: string | null
           modalityName?: string | null
-          animalBets: number[][]
+          animalBets?: number[][]
+          numberBets?: string[]
           numeroApostado?: string // Para modalidades numéricas
           position: string | null
           customPosition?: boolean
           customPositionValue?: string
           amount: number
           divisionType: 'all' | 'each'
+          isNumberModality?: boolean
         }
 
         const modalityType = modalityMap[betData.modalityName || aposta.modalidade || ''] || 'GRUPO'
@@ -866,7 +988,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Calcular valor por palpite
-        const qtdPalpites = betData.animalBets.length
+        // IMPORTANTE: Considerar tanto animalBets quanto numberBets
+        const isNumberModality = betData.isNumberModality || (betData.numberBets && betData.numberBets.length > 0) || !!betData.numeroApostado
+        const qtdPalpites = isNumberModality 
+          ? (betData.numberBets?.length || (betData.numeroApostado ? 1 : 0) || 0)
+          : (betData.animalBets?.length || 0)
+        
+        if (qtdPalpites === 0) {
+          console.log(`Aposta ${aposta.id} não tem palpites válidos, pulando.`)
+          continue
+        }
+        
         const valorPorPalpite = calcularValorPorPalpite(
           betData.amount,
           qtdPalpites,
@@ -876,7 +1008,9 @@ export async function POST(request: NextRequest) {
         // Conferir cada palpite
         let premioTotalAposta = 0
 
-        for (const animalBet of betData.animalBets) {
+        // Processar palpites de animais (se houver)
+        if (betData.animalBets && betData.animalBets.length > 0) {
+          for (const animalBet of betData.animalBets) {
           const gruposApostados = animalBet.map((animalId) => {
             const animal = ANIMALS.find((a) => a.id === animalId)
             if (!animal) {
@@ -1007,14 +1141,16 @@ export async function POST(request: NextRequest) {
           }
 
           // Calcular prêmio normalmente primeiro
-          const conferencia = conferirPalpite(
+          const conferencia = await conferirPalpite(
             resultadoOficial,
             modalityType,
             palpiteData,
             pos_from,
             pos_to,
             valorPorPalpite,
-            betData.divisionType
+            betData.divisionType,
+            betData.modality ? parseInt(betData.modality) : undefined,
+            betData.modalityName || undefined
           )
 
           // Verificar se milhar ou centena está cotada APENAS SE GANHOU
@@ -1034,7 +1170,7 @@ export async function POST(request: NextRequest) {
                   // Exemplo: se odd normal é 6000x e cotação é 1000x, recalcula usando 1000x
                   if (cotacao !== null && cotacao > 0) {
                     const { buscarOdd } = await import('@/lib/bet-rules-engine')
-                    const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                    const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, undefined, betData.modalityName || null)
                     // Recalcular: (cotacao_especial / odd_normal) * premio_calculado
                     premioFinal = (cotacao / oddNormal) * conferencia.totalPrize
                   } else {
@@ -1049,7 +1185,7 @@ export async function POST(request: NextRequest) {
                 if (cotada) {
                   if (cotacao !== null && cotacao > 0) {
                     const { buscarOdd } = await import('@/lib/bet-rules-engine')
-                    const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                    const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, undefined, betData.modalityName || null)
                     premioFinal = (cotacao / oddNormal) * conferencia.totalPrize
                   } else {
                     premioFinal = conferencia.totalPrize / 6
@@ -1065,7 +1201,7 @@ export async function POST(request: NextRequest) {
                   const cotacaoUsar = milharCotacao ?? centenaCotacao
                   if (cotacaoUsar !== null && cotacaoUsar > 0) {
                     const { buscarOdd } = await import('@/lib/bet-rules-engine')
-                    const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                    const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, undefined, betData.modalityName || null)
                     premioFinal = (cotacaoUsar / oddNormal) * conferencia.totalPrize
                   } else {
                     premioFinal = conferencia.totalPrize / 6
@@ -1077,6 +1213,97 @@ export async function POST(request: NextRequest) {
           }
 
           premioTotalAposta += premioFinal
+          }
+        }
+
+        // Processar palpites numéricos (se houver)
+        if (betData.numberBets && betData.numberBets.length > 0) {
+          for (const numberBet of betData.numberBets) {
+            let palpiteData: { grupos?: number[]; numero?: string; dezenas?: string } = {}
+
+            // Processar diferentes formatos de números
+            if (modalityType === 'DUQUE_DEZENA_EMD' || modalityType === 'TERNO_DEZENA_EMD') {
+              // EMD: formato "12-23" ou "12-23-34"
+              palpiteData = { dezenas: numberBet }
+            } else if (modalityType === 'QUADRA_DEZENA') {
+              // Quadra de Dezena: formato "12-23-34-45"
+              palpiteData = { dezenas: numberBet }
+            } else if (modalityType === 'DUQUE_DEZENA' || modalityType === 'TERNO_DEZENA') {
+              // Duque/Terno de Dezena: formato "12-23" ou "12-23-34"
+              palpiteData = { dezenas: numberBet }
+            } else {
+              // Modalidades numéricas normais (Dezena, Centena, Milhar, Invertidas, Milhar/Centena)
+              palpiteData = { numero: numberBet }
+            }
+
+            // Calcular prêmio normalmente primeiro
+            const conferencia = await conferirPalpite(
+              resultadoOficial,
+              modalityType,
+              palpiteData,
+              pos_from,
+              pos_to,
+              valorPorPalpite,
+              betData.divisionType,
+              betData.modality ? parseInt(betData.modality) : undefined,
+              betData.modalityName || undefined
+            )
+
+            // Verificar se milhar ou centena está cotada APENAS SE GANHOU
+            let premioFinal = conferencia.totalPrize
+            
+            if (conferencia.totalPrize > 0 && (modalityType === 'MILHAR' || modalityType === 'CENTENA' || modalityType === 'MILHAR_CENTENA')) {
+              // Verificar cotações para cada prêmio que ganhou
+              for (let pos = pos_from - 1; pos < pos_to && pos < resultadoOficial.prizes.length; pos++) {
+                const premioGanho = resultadoOficial.prizes[pos]
+                const premioStr = premioGanho.toString().padStart(4, '0')
+                
+                if (modalityType === 'MILHAR') {
+                  const { cotada, cotacao } = await verificarMilharCotada(premioStr)
+                  if (cotada) {
+                    if (cotacao !== null && cotacao > 0) {
+                      const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                      const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, undefined, betData.modalityName || null)
+                      premioFinal = (cotacao / oddNormal) * conferencia.totalPrize
+                    } else {
+                      premioFinal = conferencia.totalPrize / 6
+                    }
+                    break
+                  }
+                } else if (modalityType === 'CENTENA') {
+                  const centenaStr = premioStr.slice(-3)
+                  const { cotada, cotacao } = await verificarCentenaCotada(centenaStr)
+                  if (cotada) {
+                    if (cotacao !== null && cotacao > 0) {
+                      const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                      const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, undefined, betData.modalityName || null)
+                      premioFinal = (cotacao / oddNormal) * conferencia.totalPrize
+                    } else {
+                      premioFinal = conferencia.totalPrize / 6
+                    }
+                    break
+                  }
+                } else if (modalityType === 'MILHAR_CENTENA') {
+                  const { cotada: milharCotada, cotacao: milharCotacao } = await verificarMilharCotada(premioStr)
+                  const centenaStr = premioStr.slice(-3)
+                  const { cotada: centenaCotada, cotacao: centenaCotacao } = await verificarCentenaCotada(centenaStr)
+                  if (milharCotada || centenaCotada) {
+                    const cotacaoUsar = milharCotacao ?? centenaCotacao
+                    if (cotacaoUsar !== null && cotacaoUsar > 0) {
+                      const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                      const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, undefined, betData.modalityName || null)
+                      premioFinal = (cotacaoUsar / oddNormal) * conferencia.totalPrize
+                    } else {
+                      premioFinal = conferencia.totalPrize / 6
+                    }
+                    break
+                  }
+                }
+              }
+            }
+
+            premioTotalAposta += premioFinal
+          }
         }
 
         // Atualizar aposta e saldo do usuário
@@ -1111,15 +1338,49 @@ export async function POST(request: NextRequest) {
               },
             })
 
-            // Creditar prêmio no saldo do usuário
-            await tx.usuario.update({
+            // Buscar usuário para verificar rollover
+            const usuarioPremio = await tx.usuario.findUnique({
               where: { id: aposta.usuarioId },
-              data: {
-                saldo: {
-                  increment: premioTotalAposta,
-                },
+              select: {
+                rolloverNecessario: true,
+                rolloverAtual: true,
+                bonusBloqueado: true,
               },
             })
+
+            // Creditar prêmio no saldo do usuário e atualizar rollover
+            const updateData: any = {
+              saldo: {
+                increment: premioTotalAposta,
+              },
+              // Incrementar rolloverAtual com o valor do prêmio ganho
+              rolloverAtual: {
+                increment: premioTotalAposta,
+              },
+            }
+
+            // Se completou o rollover, liberar bônus bloqueado
+            if (usuarioPremio) {
+              const novoRolloverAtual = (usuarioPremio.rolloverAtual || 0) + premioTotalAposta
+              const rolloverNecessario = usuarioPremio.rolloverNecessario || 0
+              
+              if (usuarioPremio.bonusBloqueado && usuarioPremio.bonusBloqueado > 0 && 
+                  novoRolloverAtual >= rolloverNecessario && rolloverNecessario > 0) {
+                // Liberar bônus bloqueado quando completar rollover
+                updateData.bonusBloqueado = 0
+                updateData.rolloverNecessario = 0
+              }
+            }
+
+            await tx.usuario.update({
+              where: { id: aposta.usuarioId },
+              data: updateData,
+            })
+          })
+
+          // Enviar webhook de aposta ganha
+          WebhookTracker.apostaGanha(aposta.usuarioId, aposta.id, premioTotalAposta).catch(err => {
+            console.error(`Erro ao enviar webhook de aposta ganha para aposta ${aposta.id}:`, err)
           })
 
           liquidadas++

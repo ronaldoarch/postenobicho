@@ -2,10 +2,12 @@ import type { Metadata } from 'next'
 import './globals.css'
 import TemaProvider from '@/components/TemaProvider'
 import DynamicTitle from '@/components/DynamicTitle'
+import DynamicFavicon from '@/components/DynamicFavicon'
 import ThemeScript from '@/components/ThemeScript'
+import MetaPixelWrapper from '@/components/MetaPixelWrapper'
 
 export const metadata: Metadata = {
-  title: 'Poste no Bicho - Acerte no Jogo do Bicho e Ganhe!',
+  title: 'Poste no Bicho',
   description: 'Jogue no Jogo do Bicho Online e concorra a até R$ 1 milhão com um palpite! 100% seguro, com saque imediato via Pix.',
 }
 
@@ -24,8 +26,10 @@ export default function RootLayout({
         <link rel="stylesheet" href="https://code.iconify.design/3/3.1.1/iconify.min.css" />
       </head>
       <body className="antialiased">
+        <MetaPixelWrapper />
         <TemaProvider>
           <DynamicTitle />
+          <DynamicFavicon />
           {children}
         </TemaProvider>
       </body>

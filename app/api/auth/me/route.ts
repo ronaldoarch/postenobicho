@@ -8,9 +8,16 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const session = cookies().get('lotbicho_session')?.value
+    
+    // Se não há sessão, retornar null sem erro (evita 401 no console)
+    if (!session) {
+      return NextResponse.json({ user: null }, { status: 200 })
+    }
+    
     const payload = parseSessionToken(session)
     if (!payload) {
-      return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+      // Token inválido ou expirado - retornar null sem erro
+      return NextResponse.json({ user: null }, { status: 200 })
     }
 
     const user = await prisma.usuario.findUnique({
@@ -24,16 +31,19 @@ export async function GET() {
         bonus: true,
         bonusBloqueado: true,
         bonusSemanal: true,
+        admin: true, // Incluir campo admin
       },
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
+      // Usuário não encontrado - retornar null sem erro
+      return NextResponse.json({ user: null }, { status: 200 })
     }
 
     return NextResponse.json({ user }, { status: 200 })
   } catch (error) {
     console.error('Erro ao obter usuário logado:', error)
-    return NextResponse.json({ error: 'Erro ao obter usuário logado' }, { status: 500 })
+    // Em caso de erro, retornar null em vez de 500 para evitar erros no console
+    return NextResponse.json({ user: null }, { status: 200 })
   }
 }

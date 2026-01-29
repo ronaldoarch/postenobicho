@@ -27,6 +27,21 @@ interface HorariosConfig {
   proximaDataSemExtracao?: string | null
 }
 
+interface Extracao {
+  id: number
+  name: string
+  estado?: string
+  time: string
+  days: string
+}
+
+interface ConfiguracaoExtracoesPorDia {
+  dia: string
+  diaSemana: number
+  extracoesPermitidas: number[]
+  todasExtracoes: Extracao[]
+}
+
 export default function ConfiguracoesPage() {
   const { alerta, sucesso, erro, fecharAlerta } = useAlerta()
   const [config, setConfig] = useState<Configuracoes>({
@@ -53,10 +68,14 @@ export default function ConfiguracoesPage() {
     proximaDataSemExtracao: null,
   })
   const [savingHorarios, setSavingHorarios] = useState(false)
+  const [configExtracoesPorDia, setConfigExtracoesPorDia] = useState<ConfiguracaoExtracoesPorDia[]>([])
+  const [loadingExtracoes, setLoadingExtracoes] = useState(true)
+  const [savingExtracoes, setSavingExtracoes] = useState(false)
 
   useEffect(() => {
     loadConfig()
     loadHorarios()
+    loadExtracoesPorDia()
   }, [])
 
   const loadConfig = async () => {
@@ -89,6 +108,59 @@ export default function ConfiguracoesPage() {
       }
     } catch (error) {
       console.error('Erro ao carregar horários:', error)
+    }
+  }
+
+  const loadExtracoesPorDia = async () => {
+    setLoadingExtracoes(true)
+    try {
+      const response = await fetch('/api/admin/extracoes-por-dia', {
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        console.error('Erro na resposta da API:', response.status, response.statusText)
+        const errorText = await response.text()
+        console.error('Detalhes do erro:', errorText)
+        return
+      }
+      
+      const data = await response.json()
+      console.log('Dados recebidos da API:', data)
+      
+      if (data.configuracoes && Array.isArray(data.configuracoes)) {
+        setConfigExtracoesPorDia(data.configuracoes)
+      } else {
+        console.warn('Formato de dados inesperado:', data)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar configurações de extrações por dia:', error)
+    } finally {
+      setLoadingExtracoes(false)
+    }
+  }
+
+  const handleSalvarExtracoesPorDia = async (diaSemana: number, extracaoIds: number[]) => {
+    setSavingExtracoes(true)
+    try {
+      const response = await fetch('/api/admin/extracoes-por-dia', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ diaSemana, extracaoIds }),
+      })
+
+      if (response.ok) {
+        sucesso('Configurações Salvas', `Extrações para ${configExtracoesPorDia.find(c => c.diaSemana === diaSemana)?.dia} salvas com sucesso!`)
+        await loadExtracoesPorDia()
+      } else {
+        erro('Erro ao Salvar', 'Não foi possível salvar as configurações')
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+      erro('Erro ao Salvar', 'Ocorreu um erro ao salvar as configurações')
+    } finally {
+      setSavingExtracoes(false)
     }
   }
 
@@ -282,6 +354,21 @@ export default function ConfiguracoesPage() {
               </p>
             </div>
           )}
+        </div>
+
+        {/* Link para Integrações */}
+        <div className="border-t border-gray-200 pt-6">
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800 mb-2">
+              <strong>🔗 Integrações:</strong> Configure Meta Pixel e Webhooks na página dedicada de integrações.
+            </p>
+            <a
+              href="/admin/integracoes"
+              className="inline-block px-4 py-2 bg-blue text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold"
+            >
+              Ir para Integrações →
+            </a>
+          </div>
         </div>
 
         <div className="flex gap-4">
@@ -515,6 +602,79 @@ export default function ConfiguracoesPage() {
           </div>
         </div>
       </form>
+
+      {/* Configurações de Extrações por Dia */}
+      <div className="bg-white rounded-xl shadow-md p-6 mt-8">
+        <h2 className="text-2xl font-semibold text-gray-900 mb-6">Extrações Permitidas por Dia da Semana</h2>
+        <p className="text-sm text-gray-600 mb-6">
+          Selecione quais extrações podem receber apostas em cada dia da semana. Se nenhuma extração for selecionada para um dia, nenhuma aposta será permitida nesse dia.
+        </p>
+
+        {loadingExtracoes ? (
+          <div className="text-center py-8">Carregando configurações...</div>
+        ) : configExtracoesPorDia.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <p>Nenhuma configuração encontrada. Verifique se a API está funcionando corretamente.</p>
+            <p className="text-sm mt-2">Verifique o console do navegador para mais detalhes.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {configExtracoesPorDia.map((config) => (
+              <div key={config.diaSemana} className="border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{config.dia}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                  {config.todasExtracoes.map((extracao) => {
+                    const isSelected = config.extracoesPermitidas.includes(extracao.id)
+                    return (
+                      <label
+                        key={extracao.id}
+                        className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-blue bg-blue/10'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const novasExtracoes = e.target.checked
+                              ? [...config.extracoesPermitidas, extracao.id]
+                              : config.extracoesPermitidas.filter(id => id !== extracao.id)
+                            
+                            setConfigExtracoesPorDia(prev =>
+                              prev.map(c =>
+                                c.diaSemana === config.diaSemana
+                                  ? { ...c, extracoesPermitidas: novasExtracoes }
+                                  : c
+                              )
+                            )
+                          }}
+                          className="w-4 h-4 accent-blue"
+                        />
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">{extracao.name}</div>
+                          <div className="text-xs text-gray-500">
+                            {extracao.estado} • {extracao.time} • {extracao.days}
+                          </div>
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSalvarExtracoesPorDia(config.diaSemana, config.extracoesPermitidas)}
+                  disabled={savingExtracoes}
+                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {savingExtracoes ? 'Salvando...' : `Salvar Configurações para ${config.dia}`}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Alerta bonito */}
       {alerta && (

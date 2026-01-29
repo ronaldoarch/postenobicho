@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { WebhookTracker } from '@/lib/webhook-tracker'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,12 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const status = String(body.status || '').toLowerCase()
-    const idTransaction = body.idTransaction ? String(body.idTransaction) : undefined
+    // Aceitar tanto idTransaction quanto transaction_id (formato da API Nxgate)
+    const idTransaction = body.idTransaction 
+      ? String(body.idTransaction) 
+      : body.transaction_id 
+      ? String(body.transaction_id)
+      : undefined
     const documentoPagador = body.documento_pagador ? String(body.documento_pagador) : undefined
 
     console.log('=== WEBHOOK NXGATE ===')
@@ -29,8 +35,9 @@ export async function POST(req: NextRequest) {
     console.log('====================')
 
     if (!idTransaction) {
-      console.error('Webhook sem idTransaction')
-      return NextResponse.json({ error: 'idTransaction é obrigatório' }, { status: 400 })
+      console.error('Webhook sem idTransaction ou transaction_id')
+      console.error('Body recebido:', JSON.stringify(body, null, 2))
+      return NextResponse.json({ error: 'idTransaction ou transaction_id é obrigatório' }, { status: 400 })
     }
 
     // Processar depósito (cash-in)
@@ -59,8 +66,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'received', message: 'Transação já processada' }, { status: 200 })
       }
 
-      // Contar depósitos pagos anteriores (para bônus de primeiro depósito)
-      const depositosPagos = await prisma.transacao.count({
+      // Verificar se é primeiro depósito do usuário
+      const depositosPagosUsuario = await prisma.transacao.count({
         where: {
           usuarioId: transacao.usuarioId,
           tipo: 'deposito',
@@ -68,10 +75,32 @@ export async function POST(req: NextRequest) {
         },
       })
 
-      // Regras de bônus
+      // Verificar se é primeiro depósito com este CPF (validação de CPF único)
+      let isPrimeiroDepositoCPF = true
+      if (transacao.usuario.cpf) {
+        // Contar depósitos pagos de qualquer usuário com o mesmo CPF
+        const usuariosComMesmoCPF = await prisma.usuario.findMany({
+          where: { cpf: transacao.usuario.cpf },
+          select: { id: true },
+        })
+        
+        if (usuariosComMesmoCPF.length > 0) {
+          const userIdsComMesmoCPF = usuariosComMesmoCPF.map(u => u.id)
+          const depositosPagosCPF = await prisma.transacao.count({
+            where: {
+              usuarioId: { in: userIdsComMesmoCPF },
+              tipo: 'deposito',
+              status: 'pago',
+            },
+          })
+          isPrimeiroDepositoCPF = depositosPagosCPF === 0
+        }
+      }
+
+      // Regras de bônus - só aplica se for primeiro depósito do usuário E primeiro depósito com o CPF
       const bonusPercent = Number(process.env.BONUS_FIRST_DEPOSIT_PERCENT ?? 50)
       const bonusMax = Number(process.env.BONUS_FIRST_DEPOSIT_MAX ?? 100)
-      const bonusValue = depositosPagos === 0
+      const bonusValue = (depositosPagosUsuario === 0 && isPrimeiroDepositoCPF)
         ? Math.min(transacao.valor * (bonusPercent / 100), bonusMax)
         : 0
 
@@ -108,13 +137,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: 'received' }, { status: 200 })
     }
 
-    // Processar saque (cash-out)
+    // Processar saque (cash-out) - AUTOMÁTICO
     if (status === 'saque-pago' || status === 'saque_pago') {
-      // Buscar saque pendente pelo idTransaction
+      // Buscar saque pendente pelo idTransaction ou internalreference
       const saque = await prisma.saque.findFirst({
         where: {
-          referenciaExterna: idTransaction,
-          status: 'pendente',
+          OR: [
+            { referenciaExterna: idTransaction },
+            { referenciaExterna: body.internalreference },
+          ],
+          status: { in: ['pendente', 'aprovado'] }, // Aceitar pendente ou já aprovado
+        },
+        include: {
+          usuario: true,
         },
       })
 
@@ -123,12 +158,19 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'received', message: 'Saque não encontrado' }, { status: 200 })
       }
 
-      // Atualizar saque e transação
+      // Verificar se é um pagamento PIX de gerente
+      const pagamentoPix = await prisma.pagamentoPix.findFirst({
+        where: {
+          transactionId: idTransaction,
+        },
+      })
+
+      // Atualizar saque e transação - APROVAÇÃO AUTOMÁTICA
       await prisma.$transaction(async (tx) => {
         await tx.saque.update({
           where: { id: saque.id },
           data: {
-            status: 'saque-pago',
+            status: 'saque-pago', // Atualizar para saque-pago quando confirmado pelo Nxgate
           },
         })
 
@@ -141,9 +183,25 @@ export async function POST(req: NextRequest) {
             status: 'pago',
           },
         })
+
+        // Se for pagamento PIX de gerente, atualizar status também
+        if (pagamentoPix) {
+          await tx.pagamentoPix.update({
+            where: { id: pagamentoPix.id },
+            data: {
+              status: 'pago',
+            },
+          })
+          console.log(`✅ Pagamento PIX de Gerente CONFIRMADO: ${idTransaction} - Valor: R$ ${pagamentoPix.valor}`)
+        }
       })
 
-      console.log(`✅ Saque processado: ${idTransaction} - Valor: R$ ${saque.valor}`)
+      // Enviar webhook de saque aprovado
+      WebhookTracker.saque(saque.usuarioId, saque.id, saque.valor, 'aprovado').catch(err => {
+        console.error(`Erro ao enviar webhook de saque aprovado para saque ${saque.id}:`, err)
+      })
+
+      console.log(`✅ Saque APROVADO AUTOMATICAMENTE: ${idTransaction} - Valor: R$ ${saque.valor}`)
 
       return NextResponse.json({ status: 'received' }, { status: 200 })
     }
@@ -166,7 +224,14 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ status: 'received', message: 'Saque não encontrado' }, { status: 200 })
       }
 
-      // Reverter saldo do usuário (estornar)
+      // Verificar se é um pagamento PIX de gerente
+      const pagamentoPix = await prisma.pagamentoPix.findFirst({
+        where: {
+          transactionId: idTransaction,
+        },
+      })
+
+      // Reverter saldo do usuário (estornar) - apenas se não for pagamento de gerente
       await prisma.$transaction(async (tx) => {
         // Atualizar saque
         await tx.saque.update({
@@ -177,15 +242,27 @@ export async function POST(req: NextRequest) {
           },
         })
 
-        // Estornar saldo do usuário
-        await tx.usuario.update({
-          where: { id: saque.usuarioId },
-          data: {
-            saldo: {
-              increment: saque.valor,
+        // Se for pagamento PIX de gerente, atualizar status também
+        if (pagamentoPix) {
+          await tx.pagamentoPix.update({
+            where: { id: pagamentoPix.id },
+            data: {
+              status: 'falhou',
             },
-          },
-        })
+          })
+          console.log(`❌ Pagamento PIX de Gerente FALHOU: ${idTransaction} - Valor: R$ ${pagamentoPix.valor}`)
+          // Não estornar saldo de usuário para pagamentos de gerente (não há saldo de usuário específico)
+        } else {
+          // Apenas estornar saldo se for saque de usuário (não pagamento de gerente)
+          await tx.usuario.update({
+            where: { id: saque.usuarioId },
+            data: {
+              saldo: {
+                increment: saque.valor,
+              },
+            },
+          })
+        }
 
         // Atualizar transação
         await tx.transacao.updateMany({

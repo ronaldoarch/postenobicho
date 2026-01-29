@@ -4,6 +4,17 @@ import { useEffect, useState } from 'react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import BottomNav from '@/components/BottomNav'
+import BilheteAposta from '@/components/BilheteAposta'
+import {
+  buscarOdd,
+  calcularValorPorPalpite,
+  calcularNumero,
+  calcularGrupo,
+  calcularPremioUnidade,
+  ModalityType,
+  DivisionType,
+} from '@/lib/bet-rules-engine'
+import { MODALITIES } from '@/data/modalities'
 
 interface Aposta {
   id: number
@@ -18,6 +29,8 @@ interface Aposta {
   retornoPrevisto?: number | null
   status: 'pendente' | 'ganhou' | 'perdeu'
   detalhes?: any
+  createdAt: string | Date
+  usuarioId?: number
 }
 
 interface Extracao {
@@ -32,6 +45,7 @@ export default function MinhasApostasPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selecionada, setSelecionada] = useState<Aposta | null>(null)
+  const [apostaParaBilhete, setApostaParaBilhete] = useState<Aposta | null>(null)
   const [extracoes, setExtracoes] = useState<Extracao[]>([])
 
   useEffect(() => {
@@ -218,10 +232,12 @@ export default function MinhasApostasPage() {
                             Repetir
                           </button>
                           <button
-                            onClick={() => setSelecionada(a)}
-                            className="text-sm font-semibold text-blue hover:text-blue-700"
+                            onClick={() => setApostaParaBilhete(a)}
+                            className="text-sm font-semibold text-gray-700 hover:text-gray-900 flex items-center gap-1"
+                            title="Ver bilhete"
                           >
-                            Ver detalhes
+                            <span className="iconify i-fluent:ticket-diagonal-16-regular"></span>
+                            Bilhete
                           </button>
                         </div>
                       </td>
@@ -280,10 +296,87 @@ export default function MinhasApostasPage() {
                 label="Valor apostado"
                 value={`R$ ${Number(selecionada.valor || 0).toFixed(2)}`}
               />
-              <Detail
-                label="Retorno previsto"
-                value={`R$ ${Number(selecionada.retornoPrevisto || 0).toFixed(2)}`}
-              />
+              {(() => {
+                // Calcular retorno mínimo e máximo se os detalhes estiverem disponíveis
+                let retornoMinimo = null
+                let retornoMaximo = null
+                
+                if (selecionada.detalhes) {
+                  try {
+                    const detalhesObj = typeof selecionada.detalhes === 'string' 
+                      ? JSON.parse(selecionada.detalhes) 
+                      : selecionada.detalhes
+                    
+                    // Verificar se já temos os valores calculados nos detalhes
+                    if (detalhesObj.retornoMinimo !== undefined && detalhesObj.retornoMaximo !== undefined) {
+                      retornoMinimo = detalhesObj.retornoMinimo
+                      retornoMaximo = detalhesObj.retornoMaximo
+                    } else if (detalhesObj.betData) {
+                      // Usar valores hardcoded como fallback (não podemos usar await em IIFE)
+                      // O cálculo completo será feito no backend durante a criação da aposta
+                      const { buscarOddSync } = require('@/lib/bet-rules-engine')
+                      const modalityMap: Record<string, any> = {
+                        'Grupo': 'GRUPO',
+                        'Dupla de Grupo': 'DUPLA_GRUPO',
+                        'Terno de Grupo': 'TERNO_GRUPO',
+                        'Quadra de Grupo': 'QUADRA_GRUPO',
+                        'Dezena': 'DEZENA',
+                        'Centena': 'CENTENA',
+                        'Milhar': 'MILHAR',
+                        'Dezena Invertida': 'DEZENA_INVERTIDA',
+                        'Centena Invertida': 'CENTENA_INVERTIDA',
+                        'Milhar Invertida': 'MILHAR_INVERTIDA',
+                        'Milhar/Centena': 'MILHAR_CENTENA',
+                      }
+                      const betData = detalhesObj.betData
+                      const modalityType = modalityMap[betData.modalityName] || 'GRUPO'
+                      const pos_from = betData.position?.includes('-') ? parseInt(betData.position.split('-')[0]) : 1
+                      const pos_to = betData.position?.includes('-') ? parseInt(betData.position.split('-')[1]) : 5
+                      const odd = buscarOddSync(modalityType, pos_from, pos_to)
+                      // Usar valores aproximados baseados na odd hardcoded
+                      retornoMinimo = selecionada.valor * odd * 0.1
+                      retornoMaximo = selecionada.valor * odd * 5
+                    }
+                  } catch (e) {
+                    console.error('Erro ao calcular retorno:', e)
+                  }
+                }
+                
+                if (retornoMinimo !== null && retornoMaximo !== null && retornoMinimo > 0) {
+                  return (
+                    <div className="col-span-2 rounded-lg border border-gray-100 bg-blue/10 px-3 py-2">
+                      <p className="text-xs text-gray-500 mb-2 font-semibold">Retorno Previsto por Palpite:</p>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-gray-600">Mínimo possível:</span>
+                          <span className="font-semibold text-gray-900">
+                            R$ {Number(retornoMinimo).toFixed(2)}
+                          </span>
+                        </div>
+                        {retornoMaximo !== retornoMinimo && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-600">Máximo possível:</span>
+                            <span className="font-semibold text-green-600">
+                              R$ {Number(retornoMaximo).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500 italic">
+                        💡 O retorno por palpite varia conforme quantas posições ele acertar (1 até todas as posições)
+                      </p>
+                    </div>
+                  )
+                } else {
+                  // Fallback para retorno previsto simples
+                  return (
+                    <Detail
+                      label="Retorno previsto"
+                      value={`R$ ${Number(selecionada.retornoPrevisto || 0).toFixed(2)}`}
+                    />
+                  )
+                }
+              })()}
               <Detail label="Horário" value={selecionada.horario || '—'} />
               <Detail label="Loteria" value={getLoteriaName(selecionada.loteria)} />
               <Detail label="Estado" value={selecionada.estado || '—'} />
@@ -404,6 +497,19 @@ export default function MinhasApostasPage() {
           </div>
         </div>
       )}
+
+      {/* Modal do Bilhete */}
+      {apostaParaBilhete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-8 overflow-y-auto">
+          <div className="w-full max-w-md">
+            <BilheteAposta 
+              aposta={apostaParaBilhete} 
+              onClose={() => setApostaParaBilhete(null)}
+              showPrintButton={true}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -415,4 +521,102 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="font-semibold text-gray-900">{value}</p>
     </div>
   )
+}
+
+// Função para calcular retorno mínimo e máximo
+async function calculateReturnRange(betData: any, valorTotal: number): Promise<{ min: number; max: number }> {
+  try {
+    if (!betData.position || !betData.modalityName || (!betData.animalBets?.length && !betData.numberBets?.length)) {
+      return { min: 0, max: 0 }
+    }
+
+    // Parsear posição
+    let pos_from = 1
+    let pos_to = 5
+    const positionToUse = betData.customPosition && betData.customPositionValue 
+      ? betData.customPositionValue.trim() 
+      : betData.position
+    
+    if (positionToUse) {
+      if (positionToUse === '1st') {
+        pos_from = 1
+        pos_to = 1
+      } else if (positionToUse.includes('-')) {
+        const [from, to] = positionToUse.split('-').map(Number)
+        pos_from = from || 1
+        pos_to = to || 5
+      } else {
+        const singlePos = parseInt(positionToUse.replace(/º/g, '').replace(/\s/g, ''), 10)
+        if (!isNaN(singlePos) && singlePos >= 1 && singlePos <= 7) {
+          pos_from = singlePos
+          pos_to = singlePos
+        }
+      }
+    }
+
+    // Mapear modalidade
+    const modalityMap: Record<string, ModalityType> = {
+      'Grupo': 'GRUPO',
+      'Dupla de Grupo': 'DUPLA_GRUPO',
+      'Terno de Grupo': 'TERNO_GRUPO',
+      'Quadra de Grupo': 'QUADRA_GRUPO',
+      'Dezena': 'DEZENA',
+      'Centena': 'CENTENA',
+      'Milhar': 'MILHAR',
+      'Dezena Invertida': 'DEZENA_INVERTIDA',
+      'Centena Invertida': 'CENTENA_INVERTIDA',
+      'Milhar Invertida': 'MILHAR_INVERTIDA',
+      'Milhar/Centena': 'MILHAR_CENTENA',
+      'Passe vai': 'PASSE',
+      'Passe vai e vem': 'PASSE_VAI_E_VEM',
+      'Quadra de Dezena': 'QUADRA_DEZENA',
+      'Duque de Dezena (EMD)': 'DUQUE_DEZENA_EMD',
+      'Terno de Dezena (EMD)': 'TERNO_DEZENA_EMD',
+      'Dezeninha': 'DEZENINHA',
+      'Terno de Grupo Seco': 'TERNO_GRUPO_SECO',
+    }
+    
+    const modalityType = modalityMap[betData.modalityName] || 'GRUPO'
+    const isNumberModality = betData.numberBets?.length > 0
+    const qtdPalpites = isNumberModality 
+      ? (betData.numberBets?.length || 0)
+      : (betData.animalBets?.length || 0)
+
+    // Calcular valor por palpite
+    const valorPorPalpite = calcularValorPorPalpite(
+      valorTotal,
+      qtdPalpites,
+      (betData.divisionType || 'all') as DivisionType
+    )
+
+    // Buscar odd do banco primeiro (se admin alterou), senão usa hardcoded
+    const betRulesEngine = await import('@/lib/bet-rules-engine')
+    const buscarOddFn = betRulesEngine.buscarOdd as any
+    let odd = await buscarOddFn(modalityType, pos_from, pos_to, betData.modality ? parseInt(betData.modality) : undefined, betData.modalityName || undefined)
+
+    // Calcular unidades e prêmio por unidade
+    let calculation: any
+    if (modalityType.includes('GRUPO')) {
+      const qtdGrupos = isNumberModality ? 0 : (betData.animalBets?.[0]?.length || 0)
+      calculation = calcularGrupo(modalityType, qtdGrupos, pos_from, pos_to, valorPorPalpite)
+    } else {
+      const numeroExemplo = isNumberModality ? (betData.numberBets?.[0] || '0000') : '0000'
+      calculation = calcularNumero(modalityType, numeroExemplo, pos_from, pos_to, valorPorPalpite)
+    }
+
+    const premioUnidade = calcularPremioUnidade(odd, calculation.unitValue)
+    const qtdPosicoes = calculation.positions
+
+    // Retorno mínimo (1 posição) e máximo (todas as posições)
+    const retornoMinimoPorPalpite = premioUnidade * 1
+    const retornoMaximoPorPalpite = premioUnidade * qtdPosicoes
+
+    return {
+      min: retornoMinimoPorPalpite,
+      max: retornoMaximoPorPalpite,
+    }
+  } catch (error) {
+    console.error('Erro ao calcular retorno:', error)
+    return { min: 0, max: 0 }
+  }
 }

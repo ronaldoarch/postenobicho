@@ -3,10 +3,9 @@ import { ResultadosResponse, ResultadoItem } from '@/types/resultados'
 import { toIsoDate } from '@/lib/resultados-helpers'
 import { extracoes, type Extracao } from '@/data/extracoes'
 import { getHorarioRealApuracao } from '@/data/horarios-reais-apuracao'
-import { buscarResultadosPorNome, buscarResultadosBichoCerto } from '@/lib/bichocerto-parser'
-
-// Flag para usar parser direto (desativa API antiga)
-const USAR_BICHOCERTO_DIRETO = process.env.USAR_BICHOCERTO_DIRETO !== 'false'
+// API antiga desativada - usando nova API do PosteNoBicho
+// import { buscarResultadosPorNome, buscarResultadosBichoCerto } from '@/lib/bichocerto-parser'
+import { buscarResultadosRJPosteNoBicho, buscarResultadoFederalPosteNoBicho } from '@/lib/postenobicho-api-parser'
 
 const UF_NAME_MAP: Record<string, string> = {
   RJ: 'Rio de Janeiro',
@@ -352,78 +351,70 @@ export async function GET(req: NextRequest) {
   const dataBusca = dateFilter ? toIsoDate(dateFilter) : hoje.toISOString().split('T')[0]
 
   try {
-    // Se não usar parser direto, tentar API antiga como fallback
-    if (!USAR_BICHOCERTO_DIRETO) {
-      console.log('⚠️ USAR_BICHOCERTO_DIRETO=false, usando API antiga')
-      // TODO: Implementar fallback para API antiga se necessário
-      throw new Error('API antiga desativada - use USAR_BICHOCERTO_DIRETO=true')
-    }
+    console.log(`🔍 Buscando resultados da API PosteNoBicho para data: ${dataBusca}`)
+    console.log(`📅 Data formatada: ${dataBusca}, Filtro UF: ${uf || 'nenhum'}, Filtro location: ${locationFilter || 'nenhum'}`)
 
-    console.log(`🔍 Buscando resultados do bichocerto.com para data: ${dataBusca}`)
-
-    // Buscar resultados de todas as loterias ativas
-    const loteriasUnicas = Array.from(new Set(extracoes.filter(e => e.active).map(e => e.name)))
-    
-    const resultadosPorLoteria: Record<string, any[]> = {}
+    let results: ResultadoItem[] = []
     const extracaoHorarios: Record<string, string[]> = {}
 
-    // Buscar resultados de cada loteria em paralelo
-    const promessas = loteriasUnicas.map(async (nomeLoteria) => {
-      try {
-        const resultadosBichoCerto = await buscarResultadosPorNome(nomeLoteria, dataBusca)
+    // Buscar apenas resultados do Rio de Janeiro (horários: 09, 11, 14, 16, 18, 21)
+    try {
+      console.log(`🔍 Iniciando busca de resultados do RJ para data: ${dataBusca}`)
+      const resultadosRJ = await buscarResultadosRJPosteNoBicho(dataBusca)
+      console.log(`📊 Resultados RJ encontrados: ${resultadosRJ.length}`)
+      
+      resultadosRJ.forEach((resultado) => {
+        const nomeLoteria = resultado.loteria || 'PT RIO'
+        const estado = 'RJ'
+        const locationResolved = UF_NAME_MAP[estado] || 'Rio de Janeiro'
         
-        if (resultadosBichoCerto.length > 0) {
-          resultadosPorLoteria[nomeLoteria] = resultadosBichoCerto
-          
-          // Extrair horários encontrados
-          if (!extracaoHorarios[nomeLoteria]) {
-            extracaoHorarios[nomeLoteria] = []
-          }
-          resultadosBichoCerto.forEach(r => {
-            if (!extracaoHorarios[nomeLoteria].includes(r.horario)) {
-              extracaoHorarios[nomeLoteria].push(r.horario)
-            }
-          })
+        // Extrair horário do sorteio (ex: "14 Horas" -> "14")
+        // O horário vem no formato "14 Horas" da API
+        const horarioSorteio = resultado.horario.replace(' Horas', '').replace(':00', '').replace(':', '').trim()
+        const horarioNum = horarioSorteio.padStart(2, '0')
+        
+        // Calcular horário de apuração (:30 após o horário do sorteio)
+        // Ex: sorteio 09:00 -> apuração 09:30, sorteio 14:00 -> apuração 14:30
+        const horarioApuracaoFormatado = `${horarioNum}:30`
+        
+        if (!extracaoHorarios[nomeLoteria]) {
+          extracaoHorarios[nomeLoteria] = []
         }
-      } catch (error) {
-        console.error(`❌ Erro ao buscar resultados para ${nomeLoteria}:`, error)
-      }
-    })
-
-    await Promise.all(promessas)
-
-    // Converter resultados do parser para formato ResultadoItem
-    let results: ResultadoItem[] = []
-
-    Object.entries(resultadosPorLoteria).forEach(([nomeLoteria, resultadosBichoCerto]) => {
-      resultadosBichoCerto.forEach((resultadoBichoCerto) => {
-        resultadoBichoCerto.premios.forEach((premio: any) => {
-          const estado = inferUfFromName(nomeLoteria)
-          const locationResolved = UF_NAME_MAP[estado || ''] || nomeLoteria
-          
-          // Normalizar horário do resultado
-          const horarioOriginal = resultadoBichoCerto.horario
-          const horarioNormalizado = normalizarHorarioResultado(nomeLoteria, horarioOriginal)
-          
+        if (!extracaoHorarios[nomeLoteria].includes(horarioNum)) {
+          extracaoHorarios[nomeLoteria].push(horarioNum)
+        }
+        
+        resultado.premios.forEach((premio) => {
+          // Usar dados diretamente do JSON sem cálculos, exatamente como vem da API
           const resultadoItem: ResultadoItem = {
-            position: premio.posicao,
-            posicao: parseInt(premio.posicao.replace(/\D/g, ''), 10),
-            milhar: premio.numero,
-            grupo: premio.grupo,
-            animal: premio.animal,
-            drawTime: horarioNormalizado,
-            horario: horarioNormalizado,
+            position: `${premio.posicao}º`,
+            posicao: premio.posicao,
+            milhar: premio.milhar, // Manter como vem da API (ex: "4179")
+            grupo: premio.grupo || '', // Usar grupo que vem da API (ex: "20")
+            dezena: premio.grupo || '', // Para exibição
+            animal: premio.animal, // Nome do animal que vem da API
+            drawTime: `PT RIO ${horarioApuracaoFormatado}`, // Mostrar horário de apuração
+            horario: horarioApuracaoFormatado, // Horário de apuração (:30)
             loteria: nomeLoteria,
             location: locationResolved,
             date: dataBusca,
             dataExtracao: dataBusca,
             estado,
-            fonte: 'bichocerto.com',
+            fonte: 'api.postenobicho.com',
           }
           
           results.push(resultadoItem)
         })
       })
+    } catch (error) {
+      console.error(`❌ Erro ao buscar resultados do RJ:`, error)
+    }
+
+    // Filtrar apenas RJ na página de resultados
+    results = results.filter((r) => {
+      const estadoResultado = r.estado || ''
+      const loteriaNome = (r.loteria || '').toUpperCase()
+      return estadoResultado === 'RJ' || loteriaNome.includes('PT RIO')
     })
 
     // Filtro por data
@@ -431,13 +422,24 @@ export async function GET(req: NextRequest) {
       results = results.filter((r) => matchesDateFilter(r.dataExtracao || r.date, dateFilter))
     }
     
-    // Filtro por UF ou nome
-    // Por padrão, mostrar apenas resultados do Rio de Janeiro (RJ)
+    // Filtro por UF ou nome - apenas Rio de Janeiro
     if (uf) {
-      results = results.filter((r) => (r.estado || '').toUpperCase() === uf)
+      // Se especificou UF, filtrar apenas se for RJ
+      if (uf === 'RJ') {
+        results = results.filter((r) => (r.estado || '').toUpperCase() === 'RJ')
+      } else {
+        // Se não for RJ, não mostrar resultados
+        results = []
+      }
     } else if (locationFilter) {
       const lf = normalizeText(locationFilter)
-      results = results.filter((r) => normalizeText(r.location || '').includes(lf))
+      // Filtrar apenas se for Rio de Janeiro
+      if (lf.includes('rio') || lf.includes('rj')) {
+        results = results.filter((r) => (r.estado || '').toUpperCase() === 'RJ')
+      } else {
+        // Se não for Rio de Janeiro, não mostrar resultados
+        results = []
+      }
     } else {
       // Sem filtro específico, mostrar apenas RJ
       results = results.filter((r) => (r.estado || '').toUpperCase() === 'RJ')
@@ -470,12 +472,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(payload, { status: 200, headers: { 'Cache-Control': 'no-cache' } })
   } catch (error) {
-    console.error('❌ Erro ao buscar resultados do bichocerto.com:', error)
+    console.error('❌ Erro ao buscar resultados da API PosteNoBicho:', error)
     return NextResponse.json(
       {
         results: [],
         updatedAt: new Date().toISOString(),
-        error: 'Falha ao buscar resultados do bichocerto.com',
+        error: 'Falha ao buscar resultados da API PosteNoBicho',
       } satisfies ResultadosResponse & { error: string },
       { status: 502 }
     )

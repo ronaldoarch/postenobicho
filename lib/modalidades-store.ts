@@ -37,6 +37,7 @@ async function initializeModalidades() {
     value: m.value,
     hasLink: m.hasLink || false,
     active: m.active !== undefined ? m.active : true,
+    updatedAt: new Date(),
   }))
   
   await prisma.modalidade.createMany({
@@ -61,6 +62,7 @@ export async function setModalidades(newModalidades: Modality[]) {
       value: m.value,
       hasLink: m.hasLink || false,
       active: m.active !== undefined ? m.active : true,
+      updatedAt: new Date(),
     })),
   })
 }

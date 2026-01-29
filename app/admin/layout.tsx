@@ -16,6 +16,7 @@ export default function AdminLayout({
   const { configuracoes } = useConfiguracoes()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(true)
+  const [redirected, setRedirected] = useState(false)
 
   // Verificar autenticação (exceto na página de login)
   useEffect(() => {
@@ -25,25 +26,42 @@ export default function AdminLayout({
       return
     }
 
+    // Evitar loops de redirecionamento
+    if (redirected) {
+      return
+    }
+
     const checkAuth = async () => {
       try {
         const res = await fetch('/api/auth/me', { credentials: 'include' })
         const data = await res.json()
         if (data.user) {
+          // Verificar se o usuário é admin
+          if (!data.user.admin) {
+            setIsAuthenticated(false)
+            setRedirected(true)
+            // Redirecionar para home do site (não admin/login para evitar loop)
+            window.location.href = '/'
+            return
+          }
           setIsAuthenticated(true)
         } else {
           setIsAuthenticated(false)
+          setRedirected(true)
+          // Se não autenticado, redirecionar para login do admin
           router.push('/admin/login')
         }
       } catch (error) {
         setIsAuthenticated(false)
-        router.push('/admin/login')
+        setRedirected(true)
+        // Em caso de erro, redirecionar para home
+        window.location.href = '/'
       } finally {
         setLoading(false)
       }
     }
     checkAuth()
-  }, [pathname, router])
+  }, [pathname, router, redirected])
 
   // Se estiver na página de login, não mostrar o layout admin
   if (pathname === '/admin/login') {
@@ -73,10 +91,13 @@ export default function AdminLayout({
     { href: '/admin/descarga', label: 'Descarga', icon: '⚠️' },
     { href: '/admin/liquidacao', label: 'Liquidação', icon: '💵' },
     { href: '/admin/usuarios', label: 'Usuários', icon: '👥' },
+    { href: '/admin/localizacoes', label: 'Localizações', icon: '🗺️' },
     { href: '/admin/saques', label: 'Saques', icon: '💳' },
+    { href: '/admin/pagamentos-pix', label: 'Pagamentos PIX', icon: '💸' },
     { href: '/admin/promocoes', label: 'Promoções', icon: '🎁' },
     { href: '/admin/gateways', label: 'Gateways', icon: '🔌' },
     { href: '/admin/temas', label: 'Temas', icon: '🎨' },
+    { href: '/admin/integracoes', label: 'Integrações', icon: '🔗' },
     { href: '/admin/configuracoes', label: 'Configurações', icon: '⚙️' },
   ]
 

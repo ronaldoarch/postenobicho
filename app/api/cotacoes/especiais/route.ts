@@ -31,20 +31,20 @@ export async function GET(request: NextRequest) {
     const cotacoes = await prisma.cotacao.findMany({
       where,
       include: {
-        modalidade: {
+        Modalidade: {
           select: {
             id: true,
             name: true,
           },
         },
-        extracao: {
+        Extracao: {
           select: {
             id: true,
             name: true,
             time: true,
           },
         },
-        promocao: {
+        Promocao: {
           select: {
             id: true,
             titulo: true,

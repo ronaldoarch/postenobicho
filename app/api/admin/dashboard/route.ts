@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { parseSessionToken } from '@/lib/auth'
-import { cookies } from 'next/headers'
+import { requireAdmin } from '@/lib/admin-auth'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const session = cookies().get('lotbicho_session')?.value
-  const user = parseSessionToken(session)
-
-  if (!user) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  const adminCheck = await requireAdmin(request)
+  if (adminCheck instanceof NextResponse) {
+    return adminCheck
   }
 
   try {
@@ -31,12 +28,12 @@ export async function GET(request: NextRequest) {
       } else if (fim) {
         return { [field]: { lte: fim } }
       }
-      return {}
+      return {} // Sem filtro quando não há datas
     }
 
-    // Total de Usuários
+    // Total de Usuários (sem filtro de data se não especificado)
     const totalUsuarios = await prisma.usuario.count({
-      where: buildDateFilter('createdAt'),
+      where: inicio || fim ? buildDateFilter('createdAt') : {},
     })
 
     const novosUsuarios = await prisma.usuario.count({
@@ -50,39 +47,51 @@ export async function GET(request: NextRequest) {
     })
 
     // Total de Depósitos
+    // Nota: Depósitos via Nxgate recebem status 'pago' quando confirmados, não 'aprovado'
+    // Buscar TODOS os depósitos pagos/aprovados (sem filtro de data se não especificado)
+    const dateFilter = buildDateFilter('createdAt')
     const depositos = await prisma.transacao.findMany({
       where: {
         tipo: 'deposito',
-        status: 'aprovado',
-        ...buildDateFilter('createdAt'),
+        status: { in: ['aprovado', 'pago', 'paid'] }, // Incluir todos os status de pagos
+        ...(Object.keys(dateFilter).length > 0 ? dateFilter : {}),
       },
       select: {
         valor: true,
         createdAt: true,
+        status: true,
       },
     })
 
     const totalDepositos = depositos.reduce((sum, d) => sum + Number(d.valor || 0), 0)
     const qtdDepositos = depositos.length
 
-    // Total de Saques
+    // Total de Saques (apenas saques de usuários, excluindo pagamentos PIX de gerentes)
+    // Nota: Saques via Nxgate recebem status 'saque-pago' quando confirmados
     const saques = await prisma.saque.findMany({
-      where: buildDateFilter('createdAt'),
+      where: inicio || fim ? buildDateFilter('createdAt') : {},
       select: {
         valor: true,
         status: true,
         createdAt: true,
+        referenciaExterna: true, // Para filtrar pagamentos PIX de gerentes
       },
     })
 
-    const totalSaques = saques
-      .filter((s) => s.status === 'aprovado' || s.status === 'processando')
-      .reduce((sum, s) => sum + Number(s.valor || 0), 0)
-    const qtdSaques = saques.filter((s) => s.status === 'aprovado' || s.status === 'processando').length
+    // Filtrar saques de usuários (excluir pagamentos PIX de gerentes que têm referenciaExterna começando com "PIX-GERENTE-")
+    const saquesUsuarios = saques.filter((s) => 
+      !s.referenciaExterna || !s.referenciaExterna.startsWith('PIX-GERENTE-')
+    )
 
-    // Total de Apostas
+    // Contar saques aprovados/pagos (não incluir pendentes ou rejeitados)
+    const totalSaques = saquesUsuarios
+      .filter((s) => s.status === 'aprovado' || s.status === 'processando' || s.status === 'saque-pago')
+      .reduce((sum, s) => sum + Number(s.valor || 0), 0)
+    const qtdSaques = saquesUsuarios.filter((s) => s.status === 'aprovado' || s.status === 'processando' || s.status === 'saque-pago').length
+
+    // Total de Apostas (sem filtro de data se não especificado)
     const apostas = await prisma.aposta.findMany({
-      where: buildDateFilter('createdAt'),
+      where: inicio || fim ? buildDateFilter('createdAt') : {},
       select: {
         valor: true,
         status: true,
@@ -100,11 +109,11 @@ export async function GET(request: NextRequest) {
       return sum + Number(a.valor || 0) * 10 // Placeholder - precisa buscar do detalhes
     }, 0)
 
-    // Calcular prêmios pagos corretamente
+    // Calcular prêmios pagos corretamente (sem filtro de data se não especificado)
     const apostasComPremio = await prisma.aposta.findMany({
       where: {
         status: { in: ['ganhou', 'liquidado'] },
-        ...buildDateFilter('updatedAt'),
+        ...(inicio || fim ? buildDateFilter('updatedAt') : {}),
       },
       select: {
         valor: true,
@@ -120,8 +129,29 @@ export async function GET(request: NextRequest) {
       return sum + premio
     }, 0)
 
-    // Receita Líquida = Depósitos - Saques - Prêmios Pagos
-    const receitaLiquida = totalDepositos - totalSaques - premiosPagosCorreto
+    // Pagamentos PIX de Gerentes (sem filtro de data se não especificado)
+    const pagamentosPix = await prisma.pagamentoPix.findMany({
+      where: inicio || fim ? buildDateFilter('createdAt') : {},
+      select: {
+        valor: true,
+        createdAt: true,
+      },
+    })
+
+    const totalPagamentosPix = pagamentosPix.reduce((sum, p) => sum + Number(p.valor || 0), 0)
+    const qtdPagamentosPix = pagamentosPix.length
+
+    // Receita Líquida = Depósitos - Saques de Usuários - Prêmios Pagos - Pagamentos PIX de Gerentes
+    const receitaLiquida = totalDepositos - totalSaques - premiosPagosCorreto - totalPagamentosPix
+
+    // Calcular GGR (Gross Gaming Revenue)
+    // GGR = ((Total Apostado - Total Prêmios) / Total Apostado) * 100
+    let ggr = 0
+    let ggrPercentual = 0
+    if (totalApostas > 0) {
+      ggr = totalApostas - premiosPagosCorreto
+      ggrPercentual = (ggr / totalApostas) * 100
+    }
 
     // Detalhes adicionais
     const apostasPorStatus = {
@@ -132,11 +162,24 @@ export async function GET(request: NextRequest) {
     }
 
     const saquesPorStatus = {
-      pendente: saques.filter((s) => s.status === 'pendente').length,
-      aprovado: saques.filter((s) => s.status === 'aprovado').length,
-      processando: saques.filter((s) => s.status === 'processando').length,
-      rejeitado: saques.filter((s) => s.status === 'rejeitado').length,
+      pendente: saquesUsuarios.filter((s) => s.status === 'pendente').length,
+      aprovado: saquesUsuarios.filter((s) => s.status === 'aprovado' || s.status === 'saque-pago').length, // Incluir saque-pago como aprovado
+      processando: saquesUsuarios.filter((s) => s.status === 'processando').length,
+      rejeitado: saquesUsuarios.filter((s) => s.status === 'rejeitado' || s.status === 'saque-falhou').length, // Incluir saque-falhou como rejeitado
     }
+
+    // Log para debug (remover em produção se necessário)
+    console.log('📊 Dashboard Stats:', {
+      totalUsuarios,
+      totalDepositos,
+      qtdDepositos,
+      depositosEncontrados: depositos.length,
+      totalApostas,
+      qtdApostas,
+      totalSaques,
+      qtdSaques,
+      periodo: { inicio: dataInicio || 'todos', fim: dataFim || 'todos' },
+    })
 
     return NextResponse.json({
       stats: {
@@ -150,6 +193,10 @@ export async function GET(request: NextRequest) {
         qtdApostas,
         premiosPagos: premiosPagosCorreto,
         receitaLiquida,
+        totalPagamentosPix,
+        qtdPagamentosPix,
+        ggr,
+        ggrPercentual,
       },
       detalhes: {
         apostasPorStatus,

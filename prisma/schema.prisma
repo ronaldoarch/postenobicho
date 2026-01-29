@@ -1,12 +1,12 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Schema temporário para SQLite (desenvolvimento local)
+// IMPORTANTE: Use schema.prisma original para produção (MySQL)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -123,6 +123,13 @@ model Configuracao {
   whatsappSuporte      String   @default("5500000000000")
   logoSite             String?  @default("")
   liquidacaoAutomatica Boolean  @default(true) // Controla se a liquidação automática está ativa
+  metaPixelId          String? // ID do Meta Pixel (Facebook Pixel)
+  metaAccessToken      String? // Access Token da Conversions API
+  metaPixelEnabled     Boolean  @default(false) // Ativar/desativar rastreamento Meta
+  webhookUrl           String? // URL do webhook para tracking
+  webhookEnabled       Boolean  @default(false) // Ativar/desativar webhook
+  webhookEvents        String? // Eventos a rastrear (JSON array: ["cadastro", "deposito", "aposta", etc.])
+  webhookSecret        String? // Secret para assinatura do webhook (opcional)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
@@ -143,17 +150,52 @@ model ConfiguracaoHorarios {
   updatedAt              DateTime  @updatedAt
 }
 
-model LimiteDescarga {
+model ConfiguracaoExtracoesPorDia {
   id         Int      @id @default(autoincrement())
-  modalidade String // Nome da modalidade
-  premio     Int // 1 ao 5 (prêmio)
-  limite     Float // Limite em R$
+  diaSemana  Int // 0=Domingo, 1=Segunda, 2=Terça, 3=Quarta, 4=Quinta, 5=Sexta, 6=Sábado
+  extracaoId Int // ID da extração
   ativo      Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([modalidade, premio])
+  @@unique([diaSemana, extracaoId])
+  @@index([diaSemana])
+  @@index([extracaoId])
+}
+
+model LimiteDescarga {
+  id         Int      @id @default(autoincrement())
+  modalidade String // Nome da modalidade
+  premio     Int // 1 ao 5 (prêmio)
+  limite     Float // Limite em R$ por número específico (milhar/centena/dezena)
+  ativo      Boolean  @default(true)
+  // Campos para limite por extração + prêmio (o sistema detecta automaticamente qual número atingiu)
+  loteria    String   @default("") // Loteria/extracao (ex: "PT Rio") - "" para limite geral
+  horario    String   @default("") // Horário da extração (ex: "9:20") - "" para limite geral
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([modalidade, premio, loteria, horario])
   @@index([modalidade])
+  @@index([loteria, horario, premio])
+}
+
+model NumeroBloqueado {
+  id          Int      @id @default(autoincrement())
+  modalidade  String // Nome da modalidade
+  premio      Int // 1 ao 5 (prêmio)
+  numero      String // Número bloqueado (milhar/centena/dezena)
+  loteria     String // Loteria/extracao
+  horario     String // Horário da extração
+  valorAtual  Float // Valor total apostado neste número
+  limite      Float // Limite que foi atingido
+  bloqueadoEm DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([modalidade, premio, numero, loteria, horario])
+  @@index([modalidade, premio, loteria, horario])
+  @@index([numero])
 }
 
 model AlertaDescarga {
@@ -164,10 +206,14 @@ model AlertaDescarga {
   limite     Float // Limite configurado
   excedente  Float // Valor que excedeu o limite
   resolvido  Boolean  @default(false)
+  // Campos para alerta por extração + prêmio
+  loteria    String? // Loteria/extracao - null para alerta geral
+  horario    String? // Horário da extração - null para alerta geral
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   @@index([modalidade, premio])
+  @@index([loteria, horario, premio])
   @@index([resolvido])
   @@index([createdAt])
 }
@@ -186,38 +232,46 @@ model CotacaoEspecial {
 }
 
 model Gateway {
-  id         Int      @id @default(autoincrement())
-  name       String
-  tipo       String   @default("receba") // receba, nxgate, etc.
-  baseUrl    String
-  apiKey     String
-  webhookUrl String? // URL do webhook (opcional)
-  sandbox    Boolean  @default(true)
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           Int      @id @default(autoincrement())
+  name         String
+  tipo         String   @default("receba") // receba, nxgate, gatebox, etc.
+  baseUrl      String
+  apiKey       String
+  username     String? // Para Gatebox: username de autenticação
+  passwordHash String? // Para Gatebox: password (hash ou texto, dependendo da implementação)
+  webhookUrl   String? // URL do webhook (opcional)
+  sandbox      Boolean  @default(true)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([tipo, active])
 }
 
 model Usuario {
-  id                 Int         @id @default(autoincrement())
-  nome               String
-  email              String      @unique
-  telefone           String?
-  passwordHash       String?
-  saldo              Float       @default(0)
-  bonus              Float       @default(0)
-  bonusBloqueado     Float       @default(0)
-  rolloverNecessario Float       @default(0) // quanto precisa apostar para liberar o bônus
-  rolloverAtual      Float       @default(0) // quanto já apostou que conta para o rollover
-  bonusSemanal       Int         @default(0)
-  ativo              Boolean     @default(true)
-  saques             Saque[]
-  apostas            Aposta[]
-  transacoes         Transacao[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  id                    Int                  @id @default(autoincrement())
+  nome                  String
+  email                 String               @unique
+  cpf                   String?              @unique // CPF único para validar uma conta por CPF
+  telefone              String?
+  passwordHash          String?
+  saldo                 Float                @default(0)
+  bonus                 Float                @default(0)
+  bonusBloqueado        Float                @default(0)
+  rolloverNecessario    Float                @default(0) // quanto precisa apostar para liberar o bônus
+  rolloverAtual         Float                @default(0) // quanto já apostou que conta para o rollover
+  bonusSemanal          Int                  @default(0)
+  jaApostouComSaldoReal Boolean              @default(false) // se já apostou pelo menos uma vez com saldo real
+  jaApostou             Boolean              @default(false) // se já apostou pelo menos uma vez (saldo ou bônus)
+  ativo                 Boolean              @default(true)
+  admin                 Boolean              @default(false) // Indica se o usuário é administrador
+  saques                Saque[]
+  apostas               Aposta[]
+  transacoes            Transacao[]
+  pagamentosPix         PagamentoPix[]
+  localizacoes          UsuarioLocalizacao[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
 }
 
 model Aposta {
@@ -233,7 +287,7 @@ model Aposta {
   valor           Float     @default(0)
   retornoPrevisto Float     @default(0)
   status          String    @default("pendente")
-  detalhes        String?   @db.Text
+  detalhes        String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -275,4 +329,49 @@ model Transacao {
   updatedAt         DateTime @updatedAt
 
   @@index([usuarioId])
+}
+
+model PagamentoPix {
+  id            Int      @id @default(autoincrement())
+  chavePix      String // Chave PIX (CPF, CNPJ, email, telefone ou chave aleatória)
+  nomeRecebedor String // Nome de quem recebeu o pagamento
+  valor         Float // Valor do pagamento
+  nota          String? // Nota/observação sobre o pagamento
+  adminId       Int? // ID do admin que fez o pagamento (opcional)
+  transactionId String? // ID da transação no gateway (para rastreamento)
+  status        String   @default("pendente") // pendente, pago, falhou
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  admin Usuario? @relation(fields: [adminId], references: [id])
+
+  @@index([createdAt])
+  @@index([nomeRecebedor])
+  @@index([transactionId])
+  @@index([status])
+  @@index([adminId])
+}
+
+model UsuarioLocalizacao {
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  ip        String // IP do usuário
+  tipo      String   @default("cadastro") // cadastro, aposta, login
+  latitude  Float? // Latitude da localização
+  longitude Float? // Longitude da localização
+  cidade    String? // Cidade
+  estado    String? // Estado/UF
+  pais      String? // País
+  regiao    String? // Região
+  timezone  String? // Timezone
+  isp       String? // Provedor de internet
+  createdAt DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("UsuarioLocalizacao")
+  @@index([usuarioId])
+  @@index([tipo])
+  @@index([createdAt])
+  @@index([ip])
 }

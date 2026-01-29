@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { MetaTrackingServer } from '@/lib/meta-tracking-server'
+import { WebhookTracker } from '@/lib/webhook-tracker'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,18 +59,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Contar depósitos pagos anteriores (para bônus de primeiro depósito)
-    const depositosPagos = await prisma.transacao.count({
+    // Verificar se é primeiro depósito do usuário
+    const depositosPagosUsuario = await prisma.transacao.count({
       where: { usuarioId: user.id, tipo: 'deposito', status: 'pago' },
     })
 
-    // Regras de bônus
+    // Verificar se é primeiro depósito com este CPF (validação de CPF único)
+    let isPrimeiroDepositoCPF = true
+    if (user.cpf) {
+      // Contar depósitos pagos de qualquer usuário com o mesmo CPF
+      const usuariosComMesmoCPF = await prisma.usuario.findMany({
+        where: { cpf: user.cpf },
+        select: { id: true },
+      })
+      
+      if (usuariosComMesmoCPF.length > 0) {
+        const userIdsComMesmoCPF = usuariosComMesmoCPF.map(u => u.id)
+        const depositosPagosCPF = await prisma.transacao.count({
+          where: {
+            usuarioId: { in: userIdsComMesmoCPF },
+            tipo: 'deposito',
+            status: 'pago',
+          },
+        })
+        isPrimeiroDepositoCPF = depositosPagosCPF === 0
+      }
+    }
+
+    // Regras de bônus - só aplica se for primeiro depósito do usuário E primeiro depósito com o CPF
     const bonusPercent = Number(process.env.BONUS_FIRST_DEPOSIT_PERCENT ?? 50)
     const bonusLimit = Number(process.env.BONUS_FIRST_DEPOSIT_LIMIT ?? 100)
     const rolloverMult = Number(process.env.BONUS_ROLLOVER_MULTIPLIER ?? 3)
 
     let bonusAplicado = 0
-    if (depositosPagos === 0 && bonusPercent > 0) {
+    if (depositosPagosUsuario === 0 && isPrimeiroDepositoCPF && bonusPercent > 0) {
       const calc = (amount * bonusPercent) / 100
       bonusAplicado = Math.min(calc, bonusLimit)
     }
@@ -84,6 +108,7 @@ export async function POST(req: NextRequest) {
           bonusAplicado,
           referenciaExterna: externalId,
           descricao: 'Depósito via Receba',
+          updatedAt: new Date(),
         },
       })
 
@@ -96,6 +121,23 @@ export async function POST(req: NextRequest) {
           rolloverNecessario: bonusAplicado > 0 ? { increment: bonusAplicado * rolloverMult } : undefined,
         },
       })
+    })
+
+    // Rastrear depósito confirmado no Meta Pixel (Conversions API)
+    MetaTrackingServer.trackDeposit(user!.id, amount, 'PIX').catch(err => {
+      console.error('Erro ao rastrear depósito confirmado no Meta Pixel:', err)
+    })
+
+    // Enviar webhook de depósito/redepósito
+    // Nota: depositosPagos já foi contado acima, então após criar a transação será depositosPagos + 1
+    // Mas precisamos verificar antes de criar a transação
+    const depositosAntes = await prisma.transacao.count({
+      where: { usuarioId: user!.id, tipo: 'deposito', status: 'pago' },
+    })
+    const isRedeposito = depositosAntes > 0
+
+    WebhookTracker.deposito(user!.id, amount, externalId || '', isRedeposito).catch(err => {
+      console.error('Erro ao enviar webhook de depósito:', err)
     })
 
     return NextResponse.json({

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
         horario: horario,
       },
       include: {
-        usuario: true,
+        Usuario: true,
       },
     })
 
@@ -230,14 +230,16 @@ export async function POST(request: NextRequest) {
         let premioTotalAposta = 0
         
         try {
-          const resultadoConferencia = conferirPalpite(
+          const resultadoConferencia = await conferirPalpite(
             resultadoOficial,
             modalityType,
             palpiteParaConferir,
             pos_from,
             pos_to,
             valorPorPalpite,
-            betData.divisionType
+            betData.divisionType,
+            betData.modality ? parseInt(betData.modality) : undefined,
+            betData.modalityName || undefined
           )
 
           if (resultadoConferencia.prize.hits > 0) {
@@ -263,7 +265,8 @@ export async function POST(request: NextRequest) {
                       if (cotacao !== null && cotacao > 0) {
                         // A cotação especial substitui a odd normal
                         // Fórmula: (cotacao_especial / odd_normal) * premio_calculado
-                        const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                        const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                        const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, betData.modality ? parseInt(betData.modality) : undefined, betData.modalityName || undefined)
                         premioTotalAposta = (cotacao / oddNormal) * premioTotalAposta
                       } else {
                         // Redução padrão de 1/6 se cotada mas sem cotação específica
@@ -278,7 +281,8 @@ export async function POST(request: NextRequest) {
                       const { cotada, cotacao } = await verificarCentenaCotada(centenaGanha)
                       if (cotada) {
                         if (cotacao !== null && cotacao > 0) {
-                          const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                          const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                          const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, betData.modality ? parseInt(betData.modality) : undefined, betData.modalityName || undefined)
                           premioTotalAposta = (cotacao / oddNormal) * premioTotalAposta
                         } else {
                           premioTotalAposta = premioTotalAposta / 6
@@ -297,7 +301,8 @@ export async function POST(request: NextRequest) {
                       if (milharCotada || centenaCotada) {
                         const cotacaoUsar = milharCotacao ?? centenaCotacao
                         if (cotacaoUsar !== null && cotacaoUsar > 0) {
-                          const oddNormal = buscarOdd(modalityType, pos_from, pos_to)
+                          const { buscarOdd } = await import('@/lib/bet-rules-engine')
+                          const oddNormal = await buscarOdd(modalityType, pos_from, pos_to, betData.modality ? parseInt(betData.modality) : undefined, betData.modalityName || undefined)
                           premioTotalAposta = (cotacaoUsar / oddNormal) * premioTotalAposta
                         } else {
                           premioTotalAposta = premioTotalAposta / 6
@@ -330,14 +335,43 @@ export async function POST(request: NextRequest) {
             },
           })
 
-          // Atualizar saldo do usuário
+          // Buscar usuário para verificar rollover
+          const usuarioPremio = await prisma.usuario.findUnique({
+            where: { id: aposta.usuarioId },
+            select: {
+              rolloverNecessario: true,
+              rolloverAtual: true,
+              bonusBloqueado: true,
+            },
+          })
+
+          // Atualizar saldo do usuário e rollover
+          const updateData: any = {
+            saldo: {
+              increment: premioTotalAposta,
+            },
+            // Incrementar rolloverAtual com o valor do prêmio ganho
+            rolloverAtual: {
+              increment: premioTotalAposta,
+            },
+          }
+
+          // Se completou o rollover, liberar bônus bloqueado
+          if (usuarioPremio) {
+            const novoRolloverAtual = (usuarioPremio.rolloverAtual || 0) + premioTotalAposta
+            const rolloverNecessario = usuarioPremio.rolloverNecessario || 0
+            
+            if (usuarioPremio.bonusBloqueado && usuarioPremio.bonusBloqueado > 0 && 
+                novoRolloverAtual >= rolloverNecessario && rolloverNecessario > 0) {
+              // Liberar bônus bloqueado quando completar rollover
+              updateData.bonusBloqueado = 0
+              updateData.rolloverNecessario = 0
+            }
+          }
+
           await prisma.usuario.update({
             where: { id: aposta.usuarioId },
-            data: {
-              saldo: {
-                increment: premioTotalAposta,
-              },
-            },
+            data: updateData,
           })
 
           liquidadas++

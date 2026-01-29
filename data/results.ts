@@ -61,6 +61,8 @@ export const SAMPLE_RESULTS: ResultData[] = [
 
 export const LOCATIONS: Location[] = [
   { id: 'rj', name: 'Rio de Janeiro', flag: '🏖️' },
+  { id: 'federal', name: 'Federal', flag: '🇧🇷' },
+  // Outros estados removidos - apenas RJ e Federal são exibidos
   { id: 'sp', name: 'São Paulo', flag: '🏙️' },
   { id: 'bh', name: 'Belo Horizonte', flag: '⛰️' },
   { id: 'bsb', name: 'Brasília', flag: '🏛️' },

@@ -5,28 +5,88 @@ export interface NxgateClientOptions {
   apiKey?: string
 }
 
+// Forçar uso de IPv4 em vez de IPv6 para garantir que o IP autorizado seja usado
+// Isso é necessário porque o servidor tem ambos IPv4 e IPv6, mas apenas IPv4 está autorizado no Nxgate
+if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
+  try {
+    const dns = require('dns')
+    // Node.js 17+ usa 'ipv4first', versões anteriores usam 'verbatim'
+    if (dns.setDefaultResultOrder) {
+      dns.setDefaultResultOrder('ipv4first')
+    }
+  } catch (e) {
+    // Ignorar erro se dns não estiver disponível
+  }
+}
+
 export async function nxgateRequest<T = any>(path: string, options: NxgateClientOptions = {}, init?: RequestInit): Promise<T> {
   const url = `${options.baseUrl ?? DEFAULT_BASE_URL}${path}`
   const apiKey = options.apiKey ?? process.env.NXGATE_API_KEY ?? ''
   
-  const headers: HeadersInit = {
+  console.log(`🔗 Nxgate Request: ${url}`)
+  console.log(`🔑 API Key presente: ${apiKey ? 'SIM' : 'NÃO'}`)
+  
+  // Headers limpos - NÃO incluir headers do cliente que possam confundir o Nxgate
+  // Remover headers como x-forwarded-for, x-real-ip, etc. que são do cliente
+  const cleanHeaders: HeadersInit = {
     'Content-Type': 'application/json',
     'accept': 'application/json',
-    ...(init?.headers || {}),
+  }
+  
+  // Adicionar headers customizados do init, mas filtrar headers do cliente
+  if (init?.headers) {
+    const initHeaders = init.headers as Record<string, string>
+    const clientHeaders = ['x-forwarded-for', 'x-real-ip', 'x-forwarded-proto', 'x-forwarded-host', 'cf-connecting-ip', 'true-client-ip']
+    
+    for (const [key, value] of Object.entries(initHeaders)) {
+      if (!clientHeaders.includes(key.toLowerCase())) {
+        cleanHeaders[key] = value
+      }
+    }
   }
 
-  const res = await fetch(url, {
-    ...init,
-    headers,
-    cache: 'no-store',
-  })
+  try {
+    const res = await fetch(url, {
+      ...init,
+      headers: cleanHeaders,
+      cache: 'no-store',
+    })
 
-  if (!res.ok) {
-    const errorBody = await res.text().catch(() => '')
-    throw new Error(`Nxgate API error ${res.status}: ${errorBody}`)
+    const responseText = await res.text()
+    console.log(`📥 Nxgate Response Status: ${res.status}`)
+    console.log(`📥 Nxgate Response Body: ${responseText.substring(0, 500)}`)
+
+    if (!res.ok) {
+      let errorBody: any
+      try {
+        errorBody = JSON.parse(responseText)
+      } catch {
+        errorBody = responseText
+      }
+      
+      const errorMessage = typeof errorBody === 'object' && errorBody.message
+        ? errorBody.message
+        : typeof errorBody === 'string'
+        ? errorBody
+        : `Erro ${res.status}`
+      
+      console.error(`❌ Nxgate API Error ${res.status}:`, errorMessage)
+      throw new Error(`Nxgate API error ${res.status}: ${errorMessage}`)
+    }
+
+    try {
+      return JSON.parse(responseText) as T
+    } catch (parseError) {
+      console.error('❌ Erro ao fazer parse da resposta JSON:', parseError)
+      throw new Error(`Resposta inválida da API Nxgate: não é JSON válido`)
+    }
+  } catch (fetchError: any) {
+    console.error('❌ Erro na requisição fetch:', fetchError)
+    if (fetchError.message && fetchError.message.includes('Nxgate API error')) {
+      throw fetchError // Re-throw erros da API
+    }
+    throw new Error(`Erro de conexão com Nxgate: ${fetchError.message || String(fetchError)}`)
   }
-
-  return (await res.json()) as T
 }
 
 /**

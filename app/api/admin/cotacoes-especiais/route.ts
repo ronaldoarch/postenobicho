@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
-import { parseSessionToken } from '@/lib/auth'
+import { requireAdmin } from '@/lib/admin-auth'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -10,14 +9,10 @@ export const dynamic = 'force-dynamic'
  * Lista todas as cotações especiais
  */
 export async function GET(request: NextRequest) {
-  const session = cookies().get('lotbicho_session')?.value
-  const user = parseSessionToken(session)
-
-  if (!user) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  const adminCheck = await requireAdmin(request)
+  if (adminCheck instanceof NextResponse) {
+    return adminCheck
   }
-
-  // TODO: Verificar se usuário é admin
 
   try {
     const { searchParams } = new URL(request.url)
@@ -48,14 +43,10 @@ export async function GET(request: NextRequest) {
  * Cria uma nova cotação especial
  */
 export async function POST(request: NextRequest) {
-  const session = cookies().get('lotbicho_session')?.value
-  const user = parseSessionToken(session)
-
-  if (!user) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  const adminCheck = await requireAdmin(request)
+  if (adminCheck instanceof NextResponse) {
+    return adminCheck
   }
-
-  // TODO: Verificar se usuário é admin
 
   try {
     const body = await request.json()
@@ -119,14 +110,10 @@ export async function POST(request: NextRequest) {
  * Remove uma cotação especial
  */
 export async function DELETE(request: NextRequest) {
-  const session = cookies().get('lotbicho_session')?.value
-  const user = parseSessionToken(session)
-
-  if (!user) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  const adminCheck = await requireAdmin(request)
+  if (adminCheck instanceof NextResponse) {
+    return adminCheck
   }
-
-  // TODO: Verificar se usuário é admin
 
   try {
     const { searchParams } = new URL(request.url)
@@ -155,14 +142,10 @@ export async function DELETE(request: NextRequest) {
  * Atualiza uma cotação especial (ativa/inativa)
  */
 export async function PATCH(request: NextRequest) {
-  const session = cookies().get('lotbicho_session')?.value
-  const user = parseSessionToken(session)
-
-  if (!user) {
-    return NextResponse.json({ error: 'Não autenticado' }, { status: 401 })
+  const adminCheck = await requireAdmin(request)
+  if (adminCheck instanceof NextResponse) {
+    return adminCheck
   }
-
-  // TODO: Verificar se usuário é admin
 
   try {
     const body = await request.json()

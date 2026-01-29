@@ -119,7 +119,13 @@ export default function InstantResultModal({ open, onClose, resultado }: Instant
             )}
             <div className="flex justify-center">
               <button
-                onClick={onClose}
+                onClick={() => {
+                  // Disparar evento para atualizar saldo quando fechar após ganhar
+                  if (resultado && resultado.premioTotal > 0) {
+                    window.dispatchEvent(new Event('saldo-updated'))
+                  }
+                  onClose()
+                }}
                 className="rounded-lg bg-blue px-4 py-2 text-white font-semibold hover:bg-blue/90 transition-colors"
               >
                 Fechar

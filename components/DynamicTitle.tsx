@@ -8,7 +8,11 @@ export default function DynamicTitle() {
 
   useEffect(() => {
     if (configuracoes.nomePlataforma) {
-      document.title = `${configuracoes.nomePlataforma} - Acerte no Jogo do Bicho e Ganhe!`
+      // Usar apenas o nome da plataforma, sem sufixos adicionais
+      document.title = configuracoes.nomePlataforma
+    } else {
+      // Fallback caso não tenha nome configurado
+      document.title = 'Poste no Bicho'
     }
   }, [configuracoes.nomePlataforma])
 

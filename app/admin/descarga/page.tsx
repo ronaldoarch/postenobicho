@@ -12,6 +12,8 @@ interface LimiteDescarga {
   premio: number
   limite: number
   ativo: boolean
+  loteria?: string
+  horario?: string
 }
 
 interface AlertaDescarga {
@@ -53,6 +55,8 @@ interface ApostaDescarga {
   data: string | Date
   horario: string | null
   loteria: string | null
+  status?: string
+  modalidade?: string
   usuario: {
     id: number
     nome: string | null
@@ -71,14 +75,40 @@ export default function DescargaPage() {
     modalidade: '',
     premio: 1,
     limite: 0,
+    loteria: '', // "" = limite geral, ou nome da loteria específica
   })
+  const [extracoes, setExtracoes] = useState<Array<{ id: number; name: string; time: string; estado?: string }>>([])
   const [apostasPorLimite, setApostasPorLimite] = useState<Record<string, ApostaDescarga[]>>({})
   const [limiteExpandido, setLimiteExpandido] = useState<string | null>(null)
   const [carregandoApostas, setCarregandoApostas] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
+    loadExtracoes()
   }, [])
+
+  const loadExtracoes = async () => {
+    try {
+      const res = await fetch('/api/admin/extracoes', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        // Filtrar apenas extrações ativas (active === true) e que tenham nome válido
+        const extracoesAtivas = (data.extracoes || []).filter((e: any) => 
+          e.active === true && 
+          e.name && 
+          e.name.trim() !== '' && 
+          e.name !== '—' &&
+          e.time // Deve ter horário definido
+        )
+        setExtracoes(extracoesAtivas)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar extrações:', error)
+    }
+  }
+
+  // Obter loterias únicas (sem duplicatas) apenas das extrações ativas
+  const loteriasUnicas = Array.from(new Set(extracoes.map(e => e.name))).filter(Boolean).sort()
 
   const loadData = async () => {
     try {
@@ -121,7 +151,7 @@ export default function DescargaPage() {
       if (response.ok) {
         sucesso('Limite Definido', 'Limite de descarga definido com sucesso!')
         setShowForm(false)
-        setFormData({ modalidade: '', premio: 1, limite: 0 })
+        setFormData({ modalidade: '', premio: 1, limite: 0, loteria: '' })
         loadData()
       } else {
         const error = await response.json()
@@ -560,7 +590,32 @@ export default function DescargaPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Limite (R$)
+                Loteria/Extração (Opcional)
+              </label>
+              <select
+                value={formData.loteria}
+                onChange={(e) => setFormData({ ...formData, loteria: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue focus:border-blue"
+              >
+                <option value="">Limite Geral (todas as extrações e horários)</option>
+                {loteriasUnicas.length > 0 ? (
+                  loteriasUnicas.map((nome) => (
+                    <option key={nome} value={nome}>
+                      {nome} (todos os horários)
+                    </option>
+                  ))
+                ) : (
+                  <option value="" disabled>Carregando extrações...</option>
+                )}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Deixe vazio para limite geral em todas as extrações. Selecione uma extração para aplicar o limite a todos os horários dessa extração.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Limite por Número (R$)
               </label>
               <input
                 type="number"
@@ -572,6 +627,18 @@ export default function DescargaPage() {
                 placeholder="0.00"
                 required
               />
+                <p className="mt-1 text-xs text-gray-500">
+                  Quando o total apostado em um número específico (milhar/centena/dezena) atingir este limite, o número será bloqueado automaticamente.
+                  {formData.loteria ? (
+                    <span className="block mt-1 font-semibold text-blue-600">
+                      Este limite se aplica a todos os horários da extração "{formData.loteria}".
+                    </span>
+                  ) : (
+                    <span className="block mt-1 font-semibold text-gray-600">
+                      Este limite se aplica a todas as extrações e horários.
+                    </span>
+                  )}
+                </p>
             </div>
 
             <div className="flex gap-4">
@@ -585,7 +652,7 @@ export default function DescargaPage() {
                 type="button"
                 onClick={() => {
                   setShowForm(false)
-                  setFormData({ modalidade: '', premio: 1, limite: 0 })
+                  setFormData({ modalidade: '', premio: 1, limite: 0, loteria: '' })
                 }}
                 className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition-colors"
               >
@@ -651,6 +718,9 @@ export default function DescargaPage() {
                   Prêmio
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Extração
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Limite (R$)
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -667,7 +737,7 @@ export default function DescargaPage() {
             <tbody className="divide-y divide-gray-200">
               {limites.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                  <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                     Nenhum limite cadastrado. Clique em "Novo Limite" para criar um.
                   </td>
                 </tr>
@@ -686,6 +756,13 @@ export default function DescargaPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {limite.premio}º Prêmio
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {limite.loteria ? (
+                            <span>{limite.loteria}</span>
+                          ) : (
+                            <span className="text-gray-500">Geral</span>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           R$ {limite.limite.toFixed(2)}
@@ -726,6 +803,7 @@ export default function DescargaPage() {
                                 modalidade: limite.modalidade,
                                 premio: limite.premio,
                                 limite: limite.limite,
+                                loteria: limite.loteria || '',
                               })
                               setShowForm(true)
                             }}
@@ -737,7 +815,7 @@ export default function DescargaPage() {
                       </tr>
                       {estaExpandido && apostas.length > 0 && (
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 bg-gray-50">
+                          <td colSpan={7} className="px-6 py-4 bg-gray-50">
                             <div className="mt-2">
                               <h4 className="font-semibold text-gray-900 mb-3">
                                 Apostas - Total: R$ {totalApostado.toFixed(2)} ({apostas.length} aposta{apostas.length !== 1 ? 's' : ''})
@@ -751,6 +829,7 @@ export default function DescargaPage() {
                                       <th className="px-3 py-2 text-left">Palpite</th>
                                       <th className="px-3 py-2 text-left">Prêmio</th>
                                       <th className="px-3 py-2 text-left">Valor</th>
+                                      <th className="px-3 py-2 text-left">Status</th>
                                       <th className="px-3 py-2 text-left">Usuário</th>
                                     </tr>
                                   </thead>
@@ -764,6 +843,21 @@ export default function DescargaPage() {
                                         <td className="px-3 py-2 font-mono text-xs">{aposta.palpite || '—'}</td>
                                         <td className="px-3 py-2">{aposta.posicao || '—'}</td>
                                         <td className="px-3 py-2 font-semibold">R$ {aposta.valor.toFixed(2)}</td>
+                                        <td className="px-3 py-2">
+                                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                            aposta.status === 'liquidado' || aposta.status === 'ganhou'
+                                              ? 'bg-green-100 text-green-800'
+                                              : aposta.status === 'perdida'
+                                              ? 'bg-red-100 text-red-800'
+                                              : 'bg-yellow-100 text-yellow-800'
+                                          }`}>
+                                            {aposta.status === 'liquidado' || aposta.status === 'ganhou' 
+                                              ? 'Liquidada' 
+                                              : aposta.status === 'perdida'
+                                              ? 'Perdida'
+                                              : 'Pendente'}
+                                          </span>
+                                        </td>
                                         <td className="px-3 py-2 text-xs">
                                           {aposta.usuario?.nome || aposta.usuario?.email || '—'}
                                         </td>
@@ -778,7 +872,7 @@ export default function DescargaPage() {
                       )}
                       {estaExpandido && apostas.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 bg-gray-50 text-center text-gray-500">
+                          <td colSpan={7} className="px-6 py-4 bg-gray-50 text-center text-gray-500">
                             Nenhuma aposta encontrada para este limite
                           </td>
                         </tr>

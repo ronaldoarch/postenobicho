@@ -66,6 +66,7 @@ export async function POST(
           status: 'pago',
           valor,
           descricao: descricao || `Depósito manual via admin`,
+          updatedAt: new Date(),
         },
       })
 

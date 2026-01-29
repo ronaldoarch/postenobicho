@@ -28,9 +28,22 @@ export default function AnimalSelection({
 
   const handleToggle = (id: number) => {
     if (maxReached && !current.includes(id)) return
+    
+    // Para modalidade simples (requiredPerBet === 1), adicionar diretamente sem usar current
+    if (requiredPerBet === 1) {
+      // Verificar se já existe este animal nos palpites
+      const alreadyExists = animalBets.some((bet) => bet.length === 1 && bet[0] === id)
+      if (alreadyExists) return
+      
+      onAddBet([id])
+      return
+    }
+    
+    // Para modalidades que precisam de múltiplos animais
     setCurrent((prev) => {
       const exists = prev.includes(id)
       const next = exists ? prev.filter((n) => n !== id) : [...prev, id]
+      
       if (next.length === requiredPerBet) {
         onAddBet(next)
         return []

@@ -143,7 +143,14 @@ export async function POST(req: NextRequest) {
         valor,
         referenciaExterna: transactionId,
         descricao: `Depósito PIX - Aguardando pagamento`,
+        updatedAt: new Date(),
       },
+    })
+
+    // Rastrear início de depósito no Meta Pixel (será confirmado quando webhook confirmar)
+    const { MetaTrackingServer } = await import('@/lib/meta-tracking-server')
+    MetaTrackingServer.trackDeposit(user.id, valor, 'PIX').catch((err: any) => {
+      console.error('Erro ao rastrear depósito no Meta Pixel:', err)
     })
 
     return NextResponse.json({

@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
         status: status === 'todas' ? undefined : status,
       },
       include: {
-        usuario: {
+        Usuario: {
           select: {
             id: true,
             nome: true,

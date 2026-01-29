@@ -7,13 +7,11 @@ import { Modality } from '@/types/bet'
 interface ModalitySelectionProps {
   selectedModality: string | null
   onModalitySelect: (modalityId: string, modalityName: string) => void
-  onSpecialQuotationsClick: () => void
 }
 
 export default function ModalitySelection({
   selectedModality,
   onModalitySelect,
-  onSpecialQuotationsClick,
 }: ModalitySelectionProps) {
   const [modalidades, setModalidades] = useState<Modality[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,48 +65,15 @@ export default function ModalitySelection({
   }
   return (
     <div>
-      {/* Header with title and special quotations button */}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-950">Modalidade:</h2>
-          <p className="mt-1 text-gray-600">Para começar, escolha a modalidade de jogo.</p>
-        </div>
-        <button
-          onClick={onSpecialQuotationsClick}
-          className="flex shrink-0 items-center gap-2 rounded-lg border-2 border-blue bg-blue px-4 py-2 font-semibold text-white hover:bg-blue-scale-70 transition-colors"
-        >
-          <span className="text-lg">📊</span>
-          Cotações Especiais
-        </button>
+      {/* Header with title */}
+      <div className="mb-6">
+        <h2 className="text-xl font-bold text-gray-950">Modalidade:</h2>
       </div>
 
       {loading ? (
         <div className="text-center py-8 text-gray-600">Carregando modalidades...</div>
       ) : (
         <>
-          {/* Selected Summary */}
-          {selectedModality && (() => {
-            // modalidades já está filtrado para apenas ativas, então só precisa encontrar pelo ID
-            const modality = modalidades.find(
-              (m) => m.id.toString() === selectedModality
-            )
-            // Se a modalidade selecionada foi desativada, não mostra o resumo
-            if (!modality) {
-              return null
-            }
-            return (
-              <div className="mb-6">
-                <p className="mb-2 text-sm font-semibold text-gray-700">Modalidade selecionada:</p>
-                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-gray-950">{modality.name}</span>
-                    <span className="font-bold text-blue">{modality.value}</span>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-
           {/* Modalities Grid - 2 columns fixed */}
           <div className="mb-6 grid grid-cols-1 gap-2 md:grid-cols-2">
             {modalidades.length === 0 ? (
@@ -132,9 +97,6 @@ export default function ModalitySelection({
                     <div className="flex items-center gap-1">
                       <div className="inline-flex items-center gap-1 rounded-full border-2 border-blue bg-blue px-3 py-1.5">
                         <span className="text-sm font-bold text-white leading-tight">{modality.value}</span>
-                        {modality.hasLink && (
-                          <span className="text-red-500 text-sm leading-none">🔥</span>
-                        )}
                       </div>
                     </div>
                   </button>

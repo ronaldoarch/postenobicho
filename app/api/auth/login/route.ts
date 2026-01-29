@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createSessionToken, hashPassword } from '@/lib/auth'
+import { WebhookTracker } from '@/lib/webhook-tracker'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,11 @@ export async function POST(req: NextRequest) {
 
     const token = createSessionToken({ id: user.id, email: user.email, nome: user.nome })
     const { passwordHash, ...safeUser } = user
+
+    // Enviar webhook de login
+    WebhookTracker.login(user.id).catch(err => {
+      console.error('Erro ao enviar webhook de login:', err)
+    })
 
     const res = NextResponse.json({ user: safeUser, message: 'Login realizado com sucesso' })
     res.cookies.set('lotbicho_session', token, {

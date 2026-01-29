@@ -28,9 +28,18 @@ export default function CarteiraPage() {
   const [loading, setLoading] = useState(true)
   const [showDepositModal, setShowDepositModal] = useState(false)
   const [depositValue, setDepositValue] = useState('25,00')
+  
+  // Estados para saque
+  const [saqueValue, setSaqueValue] = useState('30,00')
+  const [chavePix, setChavePix] = useState('')
+  const [tipoChave, setTipoChave] = useState<'CPF' | 'EMAIL' | 'PHONE' | 'RANDOM'>('CPF')
+  const [savingSaque, setSavingSaque] = useState(false)
+  const [saqueError, setSaqueError] = useState<string | null>(null)
+  const [saqueSuccess, setSaqueSuccess] = useState(false)
 
-  // Placeholder de transações (ajuste quando houver endpoint de transações)
-  const [transactions] = useState<Transaction[]>([])
+  // Transações
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loadingTransactions, setLoadingTransactions] = useState(true)
 
   useEffect(() => {
     const load = async () => {
@@ -46,6 +55,14 @@ export default function CarteiraPage() {
               bonus: data.user.bonus ?? 0,
               bonusBloqueado: data.user.bonusBloqueado ?? 0,
             })
+            // Preencher chave PIX com CPF ou email do usuário
+            if (data.user.telefone) {
+              setChavePix(data.user.telefone.replace(/\D/g, ''))
+              setTipoChave('PHONE')
+            } else if (data.user.email) {
+              setChavePix(data.user.email)
+              setTipoChave('EMAIL')
+            }
           }
         }
       } catch (e) {
@@ -57,8 +74,117 @@ export default function CarteiraPage() {
     load()
   }, [])
 
+  // Carregar transações
+  useEffect(() => {
+    const loadTransactions = async () => {
+      try {
+        setLoadingTransactions(true)
+        const res = await fetch('/api/transacoes', { cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json()
+          if (data?.transacoes) {
+            const formatted = data.transacoes.map((t: any) => ({
+              id: t.id,
+              tipo: t.tipo === 'deposito' ? 'Depósito' : 'Saque',
+              data: new Date(t.createdAt).toLocaleDateString('pt-BR'),
+              valor: Math.abs(t.valor),
+              estado: t.status === 'pendente' ? 'Pendente' : t.status === 'aprovado' ? 'Aprovado' : 'Rejeitado',
+              pagoEm: t.pagoEm ? new Date(t.pagoEm).toLocaleDateString('pt-BR') : undefined,
+            }))
+            setTransactions(formatted)
+          }
+        }
+      } catch (e) {
+        console.error('Erro ao carregar transações', e)
+      } finally {
+        setLoadingTransactions(false)
+      }
+    }
+    loadTransactions()
+  }, [])
+
   const formatCurrency = (value: number) =>
     value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  const handleSaque = async () => {
+    const valor = parseFloat(saqueValue.replace(',', '.'))
+    
+    if (!valor || valor < 30) {
+      setSaqueError('Valor mínimo para saque é R$ 30,00')
+      return
+    }
+
+    if (!chavePix) {
+      setSaqueError('Informe a chave PIX')
+      return
+    }
+
+    setSavingSaque(true)
+    setSaqueError(null)
+    setSaqueSuccess(false)
+
+    try {
+      const res = await fetch('/api/saque/pix-nxgate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          valor,
+          chavePix,
+          tipoChave,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao solicitar saque')
+      }
+
+      setSaqueSuccess(true)
+      setSaqueValue('30,00')
+      
+      // Recarregar saldo e transações
+      const userRes = await fetch('/api/auth/me', { cache: 'no-store' })
+      if (userRes.ok) {
+        const userData = await userRes.json()
+        if (userData?.user) {
+          setUser({
+            nome: userData.user.nome,
+            email: userData.user.email,
+            saldo: userData.user.saldo ?? 0,
+            bonus: userData.user.bonus ?? 0,
+            bonusBloqueado: userData.user.bonusBloqueado ?? 0,
+          })
+        }
+      }
+      
+      // Recarregar transações
+      const transRes = await fetch('/api/transacoes', { cache: 'no-store' })
+      if (transRes.ok) {
+        const transData = await transRes.json()
+        if (transData?.transacoes) {
+          const formatted = transData.transacoes.map((t: any) => ({
+            id: t.id,
+            tipo: t.tipo === 'deposito' ? 'Depósito' : 'Saque',
+            data: new Date(t.createdAt).toLocaleDateString('pt-BR'),
+            valor: Math.abs(t.valor),
+            estado: t.status === 'pendente' ? 'Pendente' : t.status === 'aprovado' ? 'Aprovado' : 'Rejeitado',
+            pagoEm: t.pagoEm ? new Date(t.pagoEm).toLocaleDateString('pt-BR') : undefined,
+          }))
+          setTransactions(formatted)
+        }
+      }
+
+      setTimeout(() => {
+        setSaqueSuccess(false)
+      }, 5000)
+    } catch (err: any) {
+      setSaqueError(err.message || 'Erro ao solicitar saque')
+    } finally {
+      setSavingSaque(false)
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-gray-scale-100 text-[#1C1C1C]">
@@ -129,33 +255,87 @@ export default function CarteiraPage() {
               <h2 className="text-xl font-bold text-gray-900">Saque</h2>
               <p className="text-sm text-gray-700">Taxa: R$ 5,00 | Valor mínimo: R$ 30,00</p>
 
+              {saqueSuccess && (
+                <div className="mt-4 rounded-lg border border-green-300 bg-green-50 p-3 text-green-800">
+                  <p className="font-semibold">✅ Saque solicitado com sucesso!</p>
+                  <p className="text-sm">Aguarde a confirmação do pagamento.</p>
+                </div>
+              )}
+
+              {saqueError && (
+                <div className="mt-4 rounded-lg border border-red-300 bg-red-50 p-3 text-red-800">
+                  <p className="font-semibold">❌ Erro</p>
+                  <p className="text-sm">{saqueError}</p>
+                </div>
+              )}
+
               <div className="mt-4 space-y-3">
-                <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200 px-3 py-2">
-                  <span className="text-gray-700">R$</span>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Valor do saque:
+                  </label>
+                  <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200 px-3 py-2">
+                    <span className="text-gray-700">R$</span>
+                    <input
+                      type="text"
+                      value={saqueValue}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, '')
+                        if (value === '') {
+                          setSaqueValue('0,00')
+                        } else {
+                          const formatted = (Number(value) / 100).toFixed(2).replace('.', ',')
+                          setSaqueValue(formatted)
+                        }
+                      }}
+                      className="w-full border-none text-base outline-none"
+                      aria-label="Valor do saque"
+                      placeholder="30,00"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Tipo de chave PIX:
+                  </label>
+                  <select
+                    value={tipoChave}
+                    onChange={(e) => setTipoChave(e.target.value as any)}
+                    className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-base focus:border-blue focus:outline-none"
+                  >
+                    <option value="CPF">CPF</option>
+                    <option value="EMAIL">E-mail</option>
+                    <option value="PHONE">Telefone</option>
+                    <option value="RANDOM">Chave aleatória</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Chave PIX:
+                  </label>
                   <input
-                    className="w-full border-none text-base outline-none"
-                    defaultValue="30,00"
-                    aria-label="Valor do saque"
+                    type="text"
+                    value={chavePix}
+                    onChange={(e) => setChavePix(e.target.value)}
+                    className="w-full rounded-lg border-2 border-gray-200 px-3 py-2 text-base focus:border-blue focus:outline-none"
+                    placeholder={
+                      tipoChave === 'CPF' ? '000.000.000-00' :
+                      tipoChave === 'EMAIL' ? 'seu@email.com' :
+                      tipoChave === 'PHONE' ? '(00) 00000-0000' :
+                      'Chave aleatória'
+                    }
+                    aria-label="Chave PIX"
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200 px-3 py-2">
-                    <span className="text-gray-700">CPF</span>
-                    <span className="text-gray-500">↓</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200 px-3 py-2 flex-1">
-                    <input
-                      className="w-full border-none text-base outline-none"
-                      defaultValue="01463973128"
-                      aria-label="CPF"
-                    />
-                    <span className="text-gray-500">🔒</span>
-                  </div>
-                </div>
-
-                <button className="w-full rounded-lg bg-blue px-4 py-3 text-center font-semibold text-white hover:bg-blue-scale-70 transition-colors">
-                  Efetuar saque
+                <button
+                  onClick={handleSaque}
+                  disabled={savingSaque || parseFloat(saqueValue.replace(',', '.')) < 30 || !chavePix}
+                  className="w-full rounded-lg bg-blue px-4 py-3 text-center font-semibold text-white hover:bg-blue-scale-70 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {savingSaque ? 'Processando...' : 'Efetuar saque'}
                 </button>
               </div>
             </div>
@@ -216,38 +396,53 @@ export default function CarteiraPage() {
             </div>
 
             <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Visualizar</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Transação</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Data</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Valor</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Estado</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Pago</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {transactions.length === 0 && (
+              {loadingTransactions ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue border-t-transparent"></div>
+                  <span className="ml-3 text-gray-600">Carregando transações...</span>
+                </div>
+              ) : (
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td colSpan={6} className="px-4 py-4 text-sm text-gray-500 text-center">
-                        Nenhuma transação encontrada.
-                      </td>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Transação</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Data</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Valor</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Estado</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600">Pago</th>
                     </tr>
-                  )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {transactions.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-4 text-sm text-gray-500 text-center">
+                          Nenhuma transação encontrada.
+                        </td>
+                      </tr>
+                    )}
 
-                  {transactions.map((t) => (
-                    <tr key={t.id}>
-                      <td className="px-4 py-3 text-sm text-blue">👁️</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{t.tipo}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{t.data}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{formatCurrency(t.valor)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{t.estado}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{t.pagoEm || '--'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                    {transactions.map((t) => (
+                      <tr key={t.id}>
+                        <td className="px-4 py-3 text-sm text-gray-900">{t.tipo}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{t.data}</td>
+                        <td className={`px-4 py-3 text-sm font-semibold ${t.tipo === 'Depósito' ? 'text-green-600' : 'text-red-600'}`}>
+                          {t.tipo === 'Depósito' ? '+' : '-'} {formatCurrency(t.valor)}
+                        </td>
+                        <td className="px-4 py-3 text-sm">
+                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            t.estado === 'Aprovado' ? 'bg-green-100 text-green-800' :
+                            t.estado === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {t.estado}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{t.pagoEm || '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* Paginação placeholder */}

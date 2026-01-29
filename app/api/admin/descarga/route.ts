@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { modalidade, premio, limite } = body
+    const { modalidade, premio, limite, loteria } = body
 
     if (!modalidade || !premio || limite === undefined) {
       return NextResponse.json(
@@ -113,6 +113,8 @@ export async function POST(request: NextRequest) {
       modalidade,
       premio: Number(premio),
       limite: Number(limite),
+      loteria: loteria || '',
+      horario: '', // Sempre vazio, não usamos horário específico
     })
 
     return NextResponse.json({

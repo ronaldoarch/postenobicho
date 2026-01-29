@@ -1,95 +1,121 @@
 #!/bin/bash
-# Script simples de deploy usando SCP
-# Uso: ./scripts/deploy-simple.sh
+# Script simples: rsync cria diretórios automaticamente e envia tudo de uma vez
+# Execute este script do seu Mac
 
 set -e
 
-SERVER_IP="104.218.52.159"
-SERVER_USER="root"
-SERVER_PASS="Bicho@321"
-SERVER_PATH="/var/www/postenobicho"
+SERVER="root@104.218.52.159"
+SERVER_DIR="/var/www/postenobicho"
+LOCAL_DIR="/Volumes/midascod/postenobicho"
 
-echo "=== 🚀 Deploy Simples para o Servidor ==="
+echo "=== 🚀 Deploy Simples - Tudo de Uma Vez ==="
 echo ""
 
-# Criar script Python para restaurar arquivos no servidor
-cat > /tmp/restore-pages.py << 'PYEOF'
-import os
-import sys
+# 1. Parar PM2
+echo "1️⃣ Parando PM2..."
+ssh $SERVER "cd $SERVER_DIR && pm2 stop lotbicho || true"
+sleep 2
 
-# Este script será executado no servidor para garantir que todas as páginas existam
-# Por enquanto, apenas verifica se os arquivos principais existem
+# 2. Enviar TODAS as rotas de API de uma vez (rsync cria diretórios automaticamente)
+echo ""
+echo "2️⃣ Enviando TODAS as rotas de API de uma vez..."
+echo "   (rsync cria todos os diretórios automaticamente)"
+rsync -avz --include="*/" --include="route.ts" --exclude="*" \
+  $LOCAL_DIR/app/api/ $SERVER:$SERVER_DIR/app/api/
+echo "  ✅ Todas as rotas enviadas"
 
-pages_to_check = [
-    'app/page.tsx',
-    'app/layout.tsx',
-    'app/login/page.tsx',
-    'app/cadastro/page.tsx',
-    'app/apostar/page.tsx',
-    'app/carteira/page.tsx',
-    'app/minhas-apostas/page.tsx',
-    'app/perfil/page.tsx',
-    'app/cotacao/page.tsx',
-    'app/resultados/page.tsx',
-    'app/suporte/page.tsx',
-]
+# 3. Enviar ThemeScript.tsx (rsync cria diretório se não existir)
+echo ""
+echo "3️⃣ Enviando ThemeScript.tsx..."
+rsync -avz $LOCAL_DIR/components/ThemeScript.tsx $SERVER:$SERVER_DIR/components/ThemeScript.tsx
+echo "  ✅ ThemeScript.tsx enviado"
 
-missing = []
-for page in pages_to_check:
-    if not os.path.exists(page):
-        missing.append(page)
+# 4. Verificar arquivos enviados
+echo ""
+echo "4️⃣ Verificando arquivos enviados..."
+LOCAL_COUNT=$(find $LOCAL_DIR/app/api -name "route.ts" -type f | wc -l | tr -d ' ')
+SERVER_COUNT=$(ssh $SERVER "find $SERVER_DIR/app/api -name route.ts -type f 2>/dev/null | wc -l | tr -d ' '")
 
-if missing:
-    print(f"⚠️  Páginas faltantes: {', '.join(missing)}")
-    sys.exit(1)
-else:
-    print("✅ Todas as páginas principais estão presentes")
-PYEOF
+echo "  📊 Rotas locais: $LOCAL_COUNT"
+echo "  📊 Rotas no servidor: $SERVER_COUNT"
 
-echo "📤 Enviando arquivos principais..."
-
-# Enviar arquivos essenciais
-sshpass -p "$SERVER_PASS" scp -r -o StrictHostKeyChecking=no \
-    app/ \
-    components/ \
-    hooks/ \
-    lib/ \
-    data/ \
-    types/ \
-    public/ \
-    prisma/ \
-    scripts/ \
-    *.json \
-    *.js \
-    *.ts \
-    *.css \
-    ${SERVER_USER}@${SERVER_IP}:${SERVER_PATH}/ 2>&1 | grep -v "Warning: Permanently added" || true
-
-echo "✅ Arquivos enviados!"
-
-echo "🔧 Executando setup no servidor..."
-
-sshpass -p "$SERVER_PASS" ssh -o StrictHostKeyChecking=no ${SERVER_USER}@${SERVER_IP} << 'ENDSSH'
-cd /var/www/postenobicho
-
-echo "=== Instalando dependências ==="
-npm install
-
-echo "=== Build ==="
-rm -rf .next
-npm run build
-
-if [ $? -eq 0 ]; then
-    echo "=== Reiniciando PM2 ==="
-    pm2 restart lotbicho || pm2 start npm --name lotbicho -- start
-    echo "✅ Deploy concluído!"
+if [ "$LOCAL_COUNT" -eq "$SERVER_COUNT" ]; then
+    echo "  ✅ Todas as rotas foram sincronizadas!"
 else
-    echo "❌ Erro no build!"
-    exit 1
+    echo "  ⚠️  Faltam $((LOCAL_COUNT - SERVER_COUNT)) rotas"
 fi
-ENDSSH
 
-rm -f /tmp/restore-pages.py
-
+# 5. Limpar build
 echo ""
-echo "✅ Deploy concluído!"
+echo "5️⃣ Limpando build antigo..."
+ssh $SERVER "cd $SERVER_DIR && rm -rf .next .next/cache 2>/dev/null || true"
+echo "  ✅ Build limpo"
+
+# 6. Fazer build completo
+echo ""
+echo "6️⃣ Fazendo build completo (isso pode demorar vários minutos)..."
+echo "   Aguarde..."
+ssh $SERVER "cd $SERVER_DIR && npm run build 2>&1 | tail -50"
+
+# 7. Verificar rotas no build
+echo ""
+echo "7️⃣ Verificando rotas incluídas no build..."
+BUILD_ROUTES=$(ssh $SERVER "find $SERVER_DIR/.next/server/app/api -name route.js -type f 2>/dev/null | wc -l | tr -d ' '")
+echo "  📊 Rotas no build: $BUILD_ROUTES"
+echo "  📊 Rotas esperadas: ~$LOCAL_COUNT"
+
+if [ "$BUILD_ROUTES" -ge "$((LOCAL_COUNT - 5))" ]; then
+    echo "  ✅ Build parece completo!"
+else
+    echo "  ⚠️  Build pode estar incompleto"
+fi
+
+# 8. Reiniciar PM2
+echo ""
+echo "8️⃣ Reiniciando PM2..."
+ssh $SERVER "cd $SERVER_DIR && pm2 restart lotbicho"
+sleep 3
+
+# 9. Verificar status do PM2
+echo ""
+echo "9️⃣ Verificando status do PM2..."
+ssh $SERVER "cd $SERVER_DIR && pm2 status"
+
+# 10. Aguardar servidor iniciar
+echo ""
+echo "🔟 Aguardando servidor iniciar..."
+sleep 5
+
+# 11. Testar APIs críticas
+echo ""
+echo "1️⃣1️⃣ Testando APIs críticas..."
+APIS=(
+    "/api/configuracoes"
+    "/api/tema"
+    "/api/auth/me"
+    "/api/auth/login"
+    "/api/modalidades"
+    "/api/apostas"
+    "/api/admin/dashboard"
+)
+
+for api in "${APIS[@]}"; do
+    STATUS=$(ssh $SERVER "curl -s -o /dev/null -w '%{http_code}' http://localhost:3000$api 2>/dev/null || echo '000'")
+    if [ "$STATUS" = "200" ] || [ "$STATUS" = "401" ]; then
+        echo "  ✅ $api está respondendo (status: $STATUS)"
+    elif [ "$STATUS" = "404" ]; then
+        echo "  ⚠️  $api retornou 404"
+    else
+        echo "  ❌ $api retornou status: $STATUS"
+    fi
+done
+
+# 12. Resumo final
+echo ""
+echo "=== ✅ Deploy Completo Finalizado ==="
+echo ""
+echo "📊 Resumo:"
+echo "   • Rotas locais: $LOCAL_COUNT"
+echo "   • Rotas no servidor: $SERVER_COUNT"
+echo "   • Rotas no build: $BUILD_ROUTES"
+echo ""

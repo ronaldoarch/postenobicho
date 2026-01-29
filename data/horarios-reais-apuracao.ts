@@ -36,7 +36,9 @@ function parseDiasSemSorteio(days: string): number[] {
   }
   
   const diasSemSorteio: number[] = []
-  const diasComSorteio = days.toLowerCase().split(',').map(d => d.trim())
+  const diasComSorteio = days.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, "") // Remover acentos
+    .split(',').map(d => d.trim())
   
   // Se não menciona todos os dias, calcular quais não têm sorteio
   const todosDias = [0, 1, 2, 3, 4, 5, 6]

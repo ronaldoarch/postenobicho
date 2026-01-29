@@ -21,16 +21,17 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password }),
       })
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.error || 'Erro ao logar')
       }
-      router.push('/minhas-apostas')
+      // Usar window.location.href para garantir reload completo e ir para home
+      window.location.href = '/'
     } catch (err: any) {
       setError(err.message || 'Erro ao logar')
-    } finally {
       setLoading(false)
     }
   }
@@ -38,8 +39,8 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen flex-col bg-gray-scale-100">
       <Header />
-      <main className="flex flex-1 items-center justify-center px-4 py-8">
-        <div className="w-full max-w-md rounded-xl bg-white p-6 shadow">
+      <main className="flex flex-1 items-center justify-center px-4 py-8 pt-24 relative">
+        <div className="w-full max-w-md rounded-xl bg-white p-6 shadow relative z-10">
           <h1 className="mb-4 text-2xl font-bold text-gray-900">Entrar</h1>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>

@@ -5,6 +5,7 @@
  */
 
 import { ANIMALS } from '@/data/animals'
+import { prisma } from '@/lib/prisma'
 
 // ============================================================================
 // TIPOS E INTERFACES
@@ -239,6 +240,8 @@ export function calcularValorPorPalpite(
 
 /**
  * Calcula unidades e valor unitário para modalidades de número (normal ou invertida).
+ * IMPORTANTE: Para modalidades invertidas, o valor é dividido pelo número de variações
+ * antes de calcular o valor unitário, tratando cada variação como um palpite separado.
  */
 export function calcularNumero(
   modalidade: ModalityType,
@@ -249,14 +252,28 @@ export function calcularNumero(
 ): BetCalculation {
   const qtdPosicoes = pos_to - pos_from + 1
   const invertida = modalidade.includes('INVERTIDA')
+  const milharCentena = modalidade === 'MILHAR_CENTENA'
   
   let combinations = 1
-  if (invertida) {
+  let valorParaCalcular = valorPalpite
+  
+  if (milharCentena) {
+    // MILHAR_CENTENA: cada número gera 2 combinações (milhar + centena)
+    combinations = 2
+    // Dividir o valor por 2 (cada combinação é um palpite separado)
+    valorParaCalcular = valorPalpite / 2
+  } else if (invertida) {
+    // Contar quantas variações o número tem
     combinations = contarPermutacoesDistintas(numero)
+    // Dividir o valor pelo número de variações (cada variação é um palpite)
+    valorParaCalcular = valorPalpite / combinations
   }
   
+  // Agora calcular unidades e valor unitário normalmente
+  // Cada variação/combinação × quantidade de posições
   const units = combinations * qtdPosicoes
-  const unitValue = calcularValorUnitario(valorPalpite, units)
+  // O valor unitário é o valor por variação/combinação dividido pelas posições
+  const unitValue = qtdPosicoes > 0 ? valorParaCalcular / qtdPosicoes : 0
   
   return {
     combinations,
@@ -320,16 +337,159 @@ function getExpectedGroups(modalidade: ModalityType): number {
 // ============================================================================
 
 /**
+ * Extrai o valor numérico de uma string de cotação (ex: "1x R$ 200.00" -> 200)
+ */
+function extrairValorCotacao(value: string | null | undefined): number | null {
+  if (!value) return null
+  
+  // Tentar múltiplos padrões para extrair o valor
+  // Padrão 1: "1x R$ 20.00" ou "R$ 20.00"
+  let match = value.match(/R\$\s*([\d,]+(?:\.\d{2})?)/)
+  if (match) {
+    const valor = parseFloat(match[1].replace(',', '.'))
+    console.log('✅ Valor extraído (padrão R$):', { value, valor })
+    return valor
+  }
+  
+  // Padrão 2: Apenas número (ex: "20" ou "20.00")
+  match = value.match(/([\d,]+(?:\.\d{2})?)/)
+  if (match) {
+    const valor = parseFloat(match[1].replace(',', '.'))
+    if (valor > 0) {
+      console.log('✅ Valor extraído (padrão número):', { value, valor })
+      return valor
+    }
+  }
+  
+  console.warn('⚠️ Não foi possível extrair valor da cotação:', value)
+  return null
+}
+
+/**
+ * Mapeia nome da modalidade para ModalityType
+ */
+function nomeParaModalityType(nome: string): ModalityType | null {
+  const map: Record<string, ModalityType> = {
+    'Grupo': 'GRUPO',
+    'Dupla de Grupo': 'DUPLA_GRUPO',
+    'Terno de Grupo': 'TERNO_GRUPO',
+    'Quadra de Grupo': 'QUADRA_GRUPO',
+    'Quina de Grupo': 'QUINA_GRUPO',
+    'Terno de Grupo Seco': 'TERNO_GRUPO_SECO',
+    'Dezena': 'DEZENA',
+    'Centena': 'CENTENA',
+    'Milhar': 'MILHAR',
+    'Dezena Invertida': 'DEZENA_INVERTIDA',
+    'Centena Invertida': 'CENTENA_INVERTIDA',
+    'Milhar Invertida': 'MILHAR_INVERTIDA',
+    'Milhar/Centena': 'MILHAR_CENTENA',
+    'Milhar Centena': 'MILHAR_CENTENA',
+    'Passe vai': 'PASSE',
+    'Passe vai e vem': 'PASSE_VAI_E_VEM',
+    'Passe Vai e Vem': 'PASSE_VAI_E_VEM',
+    'Duque de Dezena': 'DUQUE_DEZENA',
+    'Terno de Dezena': 'TERNO_DEZENA',
+    'Quadra de Dezena': 'QUADRA_DEZENA',
+    'Duque de Dezena (EMD)': 'DUQUE_DEZENA_EMD',
+    'Duque de Dezena EMD': 'DUQUE_DEZENA_EMD',
+    'Terno de Dezena (EMD)': 'TERNO_DEZENA_EMD',
+    'Terno de Dezena EMD': 'TERNO_DEZENA_EMD',
+    'Dezeninha': 'DEZENINHA',
+  }
+  return map[nome] || null
+}
+
+/**
  * Busca a odd (multiplicador) de uma modalidade para um intervalo de posições.
  * 
- * NOTA: Estes valores são exemplos. Devem ser configurados conforme regras da banca.
+ * PRIORIDADE:
+ * 1. Busca no banco de dados (tabela Modalidade) - quando admin altera, usa esse valor
+ * 2. Se não encontrar no banco, usa valores hardcoded como fallback
  */
-export function buscarOdd(
+export async function buscarOdd(
   modalidade: ModalityType,
   pos_from: number,
-  pos_to: number
-): number {
+  pos_to: number,
+  modalidadeId?: number,
+  modalityName?: string | null
+): Promise<number> {
   const posKey = `${pos_from}-${pos_to}`
+  
+  // DEBUG: Log dos parâmetros recebidos
+  console.log('🔍 buscarOdd chamado:', {
+    modalidade,
+    pos_from,
+    pos_to,
+    posKey,
+    modalidadeId,
+    modalityName,
+  })
+  
+  // PRIORIDADE 1: Buscar do banco de dados
+  try {
+    let modalidadeBanco = null
+    
+    // Se tiver modalidadeId, buscar por ID
+    if (modalidadeId) {
+      modalidadeBanco = await prisma.modalidade.findUnique({
+        where: { id: modalidadeId },
+        select: { id: true, name: true, value: true, active: true },
+      })
+      console.log('🔍 Busca por ID:', { modalidadeId, encontrado: !!modalidadeBanco })
+    }
+    
+    // Se não encontrou por ID e tiver modalityName, buscar por nome
+    if (!modalidadeBanco && modalityName) {
+      console.log('🔍 Buscando por nome:', modalityName)
+      modalidadeBanco = await prisma.modalidade.findFirst({
+        where: { 
+          name: modalityName,
+          active: true,
+        },
+        select: { id: true, name: true, value: true, active: true },
+      })
+      console.log('🔍 Resultado da busca por nome:', { 
+        encontrado: !!modalidadeBanco,
+        nome: modalidadeBanco?.name,
+        valor: modalidadeBanco?.value,
+        ativo: modalidadeBanco?.active,
+      })
+    }
+    
+    // Se encontrou no banco e está ativa, usar o valor do banco
+    if (modalidadeBanco && modalidadeBanco.active && modalidadeBanco.value) {
+      const valorBanco = extrairValorCotacao(modalidadeBanco.value)
+      console.log('🔍 Extração do valor:', {
+        valorString: modalidadeBanco.value,
+        valorExtraido: valorBanco,
+      })
+      if (valorBanco !== null && valorBanco > 0) {
+        console.log('✅ Usando cotação do banco:', {
+          modalidadeId: modalidadeBanco.id,
+          modalidadeName: modalidadeBanco.name,
+          valorBanco,
+          valorString: modalidadeBanco.value,
+        })
+        // Para modalidades PASSE, sempre retornar o valor (não depende de posição)
+        if (modalidade === 'PASSE' || modalidade === 'PASSE_VAI_E_VEM') {
+          return valorBanco
+        }
+        // Para outras modalidades, retornar o valor do banco (assumindo que é o mesmo para todas as posições)
+        return valorBanco
+      } else {
+        console.warn('⚠️ Valor extraído é inválido:', valorBanco)
+      }
+    } else {
+      console.warn('⚠️ Modalidade não encontrada no banco ou inativa:', {
+        encontrado: !!modalidadeBanco,
+        ativo: modalidadeBanco?.active,
+        temValor: !!modalidadeBanco?.value,
+      })
+    }
+  } catch (error) {
+    // Se der erro ao buscar do banco, continuar com fallback
+    console.error('❌ Erro ao buscar cotação do banco:', error)
+  }
   
   // Tabela de odds por modalidade e intervalo
   const oddsTable: Record<string, Record<string, number>> = {
@@ -454,12 +614,69 @@ export function buscarOdd(
     },
   }
   
+  // PRIORIDADE 2: Usar valores hardcoded como fallback
   const modalidadeOdds = oddsTable[modalidade]
   if (!modalidadeOdds) {
     throw new Error(`Modalidade não encontrada: ${modalidade}`)
   }
   
   // Para passe, sempre usar 1-2
+  if (modalidade === 'PASSE' || modalidade === 'PASSE_VAI_E_VEM') {
+    const oddFallback = modalidadeOdds['1-2'] || 0
+    console.log('⚠️ Usando odd hardcoded (fallback):', { modalidade, odd: oddFallback })
+    return oddFallback
+  }
+  
+  const oddFallback = modalidadeOdds[posKey] || modalidadeOdds['1-5'] || 0
+  console.log('⚠️ Usando odd hardcoded (fallback):', { 
+    modalidade, 
+    posKey, 
+    odd: oddFallback,
+    motivo: 'Não encontrado no banco ou busca falhou'
+  })
+  return oddFallback
+}
+
+/**
+ * Versão síncrona de buscarOdd (para compatibilidade com código existente)
+ * Usa valores hardcoded apenas
+ */
+export function buscarOddSync(
+  modalidade: ModalityType,
+  pos_from: number,
+  pos_to: number
+): number {
+  const posKey = `${pos_from}-${pos_to}`
+  
+  const oddsTable: Record<string, Record<string, number>> = {
+    DEZENA: { '1-1': 60, '1-3': 60, '1-5': 60, '1-7': 60 },
+    CENTENA: { '1-1': 600, '1-3': 600, '1-5': 600, '1-7': 600 },
+    MILHAR: { '1-1': 5000, '1-3': 5000, '1-5': 5000 },
+    MILHAR_INVERTIDA: { '1-1': 200, '1-3': 200, '1-5': 200 },
+    CENTENA_INVERTIDA: { '1-1': 600, '1-3': 600, '1-5': 600, '1-7': 600 },
+    DEZENA_INVERTIDA: { '1-1': 60, '1-3': 60, '1-5': 60, '1-7': 60 },
+    GRUPO: { '1-1': 18, '1-3': 18, '1-5': 18, '1-7': 18 },
+    DUPLA_GRUPO: { '1-1': 180, '1-3': 180, '1-5': 180, '1-7': 180 },
+    TERNO_GRUPO: { '1-1': 1800, '1-3': 1800, '1-5': 1800, '1-7': 1800 },
+    QUADRA_GRUPO: { '1-1': 5000, '1-3': 5000, '1-5': 5000, '1-7': 5000 },
+    QUINA_GRUPO: { '1-1': 5000, '1-3': 5000, '1-5': 5000, '1-7': 5000 },
+    DUQUE_DEZENA: { '1-1': 300, '1-3': 300, '1-5': 300, '1-7': 300 },
+    TERNO_DEZENA: { '1-1': 5000, '1-3': 5000, '1-5': 5000, '1-7': 5000 },
+    PASSE: { '1-2': 300 },
+    PASSE_VAI_E_VEM: { '1-2': 150 },
+    MILHAR_CENTENA: { '1-1': 3300, '1-3': 3300, '1-5': 3300 },
+    QUADRA_DEZENA: { '1-1': 300, '1-3': 300, '1-5': 300, '1-7': 300 },
+    DUQUE_DEZENA_EMD: { '1-1': 300, '1-3': 300, '1-5': 300, '1-7': 300 },
+    TERNO_DEZENA_EMD: { '1-1': 5000, '1-3': 5000, '1-5': 5000, '1-7': 5000 },
+    DEZENINHA: { '1-1': 15, '1-3': 15, '1-5': 15, '1-7': 15 },
+    TERNO_GRUPO_SECO: { '1-1': 150, '1-3': 150, '1-5': 150, '1-7': 150 },
+  }
+  
+  const modalidadeOdds = oddsTable[modalidade]
+  if (!modalidadeOdds) {
+    throw new Error(`Modalidade não encontrada: ${modalidade}`)
+  }
+  
   if (modalidade === 'PASSE' || modalidade === 'PASSE_VAI_E_VEM') {
     return modalidadeOdds['1-2'] || 0
   }
@@ -531,9 +748,17 @@ export function conferirNumero(
   estaCotada?: boolean
 ): PrizeCalculation {
   const invertida = modalidade.includes('INVERTIDA')
+  const milharCentena = modalidade === 'MILHAR_CENTENA'
+  
   let combinations: string[] = [numeroApostado]
   
-  if (invertida) {
+  if (milharCentena) {
+    // MILHAR_CENTENA: verifica tanto milhar quanto centena
+    const numeroLimpo = numeroApostado.replace(/\D/g, '').padStart(4, '0')
+    const milhar = numeroLimpo.slice(-4)
+    const centena = numeroLimpo.slice(-3)
+    combinations = [milhar, centena]
+  } else if (invertida) {
     combinations = gerarPermutacoesDistintas(numeroApostado)
   }
   
@@ -544,19 +769,29 @@ export function conferirNumero(
     const premio = resultado[pos]
     const premioStr = premio.toString().padStart(4, '0')
     
-    // Extrair os últimos N dígitos conforme modalidade
-    let premioRelevante: string
-    if (numeroDigits === 2) {
-      premioRelevante = premioStr.slice(-2) // Dezena
-    } else if (numeroDigits === 3) {
-      premioRelevante = premioStr.slice(-3) // Centena
+    if (milharCentena) {
+      // MILHAR_CENTENA: verifica se acertou pela milhar OU pela centena
+      const milharPremio = premioStr
+      const centenaPremio = premioStr.slice(-3)
+      
+      if (combinations.includes(milharPremio) || combinations.includes(centenaPremio)) {
+        hits++
+      }
     } else {
-      premioRelevante = premioStr // Milhar
-    }
-    
-    // Verificar se alguma combinação bate
-    if (combinations.includes(premioRelevante)) {
-      hits++
+      // Extrair os últimos N dígitos conforme modalidade
+      let premioRelevante: string
+      if (numeroDigits === 2) {
+        premioRelevante = premioStr.slice(-2) // Dezena
+      } else if (numeroDigits === 3) {
+        premioRelevante = premioStr.slice(-3) // Centena
+      } else {
+        premioRelevante = premioStr // Milhar
+      }
+      
+      // Verificar se alguma combinação bate
+      if (combinations.includes(premioRelevante)) {
+        hits++
+      }
     }
   }
   
@@ -1050,7 +1285,7 @@ export function gerarResultadoInstantaneo(qtdPremios: number = 7): InstantResult
 /**
  * Confere um palpite completo contra um resultado.
  */
-export function conferirPalpite(
+export async function conferirPalpite(
   resultado: InstantResult,
   modalidade: ModalityType,
   palpite: {
@@ -1060,12 +1295,14 @@ export function conferirPalpite(
   pos_from: number,
   pos_to: number,
   valorPorPalpite: number,
-  divisaoTipo: DivisionType
-): {
+  divisaoTipo: DivisionType,
+  modalidadeId?: number,
+  modalityName?: string | null
+): Promise<{
   calculation: BetCalculation
   prize: PrizeCalculation
   totalPrize: number
-} {
+}> {
   let calculation: BetCalculation
   let prize: PrizeCalculation
   
@@ -1159,7 +1396,7 @@ export function conferirPalpite(
   }
   
   // Buscar odd e calcular prêmio
-  let odd = buscarOdd(modalidade, pos_from, pos_to)
+  let odd = await buscarOdd(modalidade, pos_from, pos_to, modalidadeId, modalityName)
   
   // Ajustar odd para Dezeninha baseado na quantidade de dezenas
   if (modalidade === 'DEZENINHA' && palpite.numero) {

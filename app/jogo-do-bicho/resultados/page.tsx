@@ -6,13 +6,18 @@ import Footer from '@/components/Footer'
 import BottomNav from '@/components/BottomNav'
 import ResultsTable from '@/components/ResultsTable'
 import { LOCATIONS } from '@/data/results'
+
+// Filtrar apenas Rio de Janeiro e Federal
+const FILTERED_LOCATIONS = LOCATIONS.filter(loc => 
+  loc.id === 'rj' || loc.id === 'federal'
+)
 import { useResultados } from '@/hooks/useResultados'
 import { formatDateLabel, getDefaultDateISO, groupResultsByDrawTime } from '@/lib/resultados-helpers'
 
 export default function ResultadosPage() {
   const defaultDate = getDefaultDateISO()
   // Filtrar por Rio de Janeiro por padrão
-  const rioDeJaneiro = LOCATIONS.find(loc => loc.name.toLowerCase().includes('rio')) || LOCATIONS[0]
+  const rioDeJaneiro = FILTERED_LOCATIONS.find(loc => loc.name.toLowerCase().includes('rio')) || FILTERED_LOCATIONS[0]
   const [selectedDate, setSelectedDate] = useState(defaultDate)
   const [selectedLocation, setSelectedLocation] = useState(rioDeJaneiro.name)
   const [activeTab, setActiveTab] = useState<'bicho' | 'loteria'>('bicho')
@@ -84,7 +89,7 @@ export default function ResultadosPage() {
                   onChange={(e) => setSelectedLocation(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue focus:outline-none"
                 >
-                  {LOCATIONS.map((location) => (
+                  {FILTERED_LOCATIONS.map((location) => (
                     <option key={location.id} value={location.name}>
                       {location.name}
                     </option>

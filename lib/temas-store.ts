@@ -81,8 +81,11 @@ export async function getTemaAtivo(): Promise<Tema> {
   
   // Se não houver tema ativo, criar o tema padrão
   if (!tema) {
+    // Nota: id e atualizadoEm são obrigatórios mesmo com @default e @updatedAt
+    // devido a um problema conhecido do Prisma com UUID e campos @updatedAt
     tema = await prisma.tema.create({
       data: {
+        id: crypto.randomUUID(), // Gerar UUID explicitamente
         nome: 'Tema Padrão',
         primaria: '#052370',
         secundaria: '#FFD700',
@@ -95,6 +98,7 @@ export async function getTemaAtivo(): Promise<Tema> {
         fundo: '#F5F5F5',
         fundoSecundario: '#FFFFFF',
         ativo: true,
+        atualizadoEm: new Date(), // Adicionar explicitamente mesmo com @updatedAt
       },
     })
   }
@@ -121,8 +125,11 @@ export async function getTemaAtivo(): Promise<Tema> {
 }
 
 export async function createTema(tema: Omit<Tema, 'id' | 'criadoEm' | 'atualizadoEm'>): Promise<Tema> {
+  // Nota: id e atualizadoEm são obrigatórios mesmo com @default e @updatedAt
+  // devido a um problema conhecido do Prisma com UUID e campos @updatedAt
   const novoTema = await prisma.tema.create({
     data: {
+      id: crypto.randomUUID(), // Gerar UUID explicitamente
       nome: tema.nome,
       primaria: tema.cores.primaria,
       secundaria: tema.cores.secundaria,
@@ -135,6 +142,7 @@ export async function createTema(tema: Omit<Tema, 'id' | 'criadoEm' | 'atualizad
       fundo: tema.cores.fundo,
       fundoSecundario: tema.cores.fundoSecundario,
       ativo: tema.ativo,
+      atualizadoEm: new Date(), // Adicionar explicitamente mesmo com @updatedAt
     },
   })
   

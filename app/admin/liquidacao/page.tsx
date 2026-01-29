@@ -150,12 +150,39 @@ export default function LiquidacaoPage() {
         if (data.desativada) {
           erro('Liquidação Desativada', 'Liquidação automática está desativada nas configurações. Use a liquidação manual abaixo.')
         } else {
-          sucesso(
-            'Liquidação Concluída',
-            `Processadas: ${data.processadas}\nLiquidadas: ${data.liquidadas}\nPrêmio Total: R$ ${data.premioTotal?.toFixed(2) || '0.00'}`
-          )
-          setLiquidadas(data.liquidadas || 0)
-          loadApostasPendentes()
+          // Se não processou nenhuma aposta, mostrar informações de debug
+          if (data.processadas === 0) {
+            let mensagem = `Nenhuma aposta processada.\n\n`
+            
+            if (data.debug) {
+              const debug = data.debug
+              mensagem += `Total de apostas pendentes: ${debug.totalApostasPendentes || 0}\n`
+              mensagem += `Apostas do RJ: ${debug.apostasDoRJ || 0}\n`
+              if (debug.apostasSemLoteria > 0) {
+                mensagem += `⚠️ Apostas sem loteria: ${debug.apostasSemLoteria}\n`
+              }
+              if (debug.apostasForaRJ > 0) {
+                mensagem += `⚠️ Apostas fora do RJ: ${debug.apostasForaRJ}\n`
+              }
+              if (debug.apostasPendentes !== undefined) {
+                mensagem += `Apostas pendentes: ${debug.apostasPendentes}\n`
+              }
+              mensagem += `\n📋 Motivo: ${debug.motivo || 'Desconhecido'}`
+            } else if (data.message) {
+              mensagem += data.message
+            } else {
+              mensagem += 'Não foi possível processar nenhuma aposta. Verifique se há apostas pendentes e se os resultados estão disponíveis.'
+            }
+            
+            erro('Nenhuma Aposta Processada', mensagem)
+          } else {
+            sucesso(
+              'Liquidação Concluída',
+              `Processadas: ${data.processadas}\nLiquidadas: ${data.liquidadas}\nPrêmio Total: R$ ${data.premioTotal?.toFixed(2) || '0.00'}`
+            )
+            setLiquidadas(data.liquidadas || 0)
+            loadApostasPendentes()
+          }
         }
       } else {
         erro('Erro na Liquidação', data.error || 'Erro ao liquidar')

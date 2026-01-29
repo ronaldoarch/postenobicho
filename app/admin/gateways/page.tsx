@@ -10,6 +10,8 @@ interface Gateway {
   tipo: string
   baseUrl: string
   apiKey: string
+  username?: string
+  passwordHash?: string
   webhookUrl?: string
   sandbox: boolean
   active: boolean
@@ -20,6 +22,8 @@ const emptyForm: Omit<Gateway, 'id'> = {
   tipo: 'receba',
   baseUrl: '',
   apiKey: '',
+  username: '',
+  passwordHash: '',
   webhookUrl: '',
   sandbox: true,
   active: true,
@@ -55,7 +59,22 @@ export default function GatewaysPage() {
     setSaving(true)
     try {
       const method = editingId ? 'PUT' : 'POST'
-      const body = editingId ? { id: editingId, ...form } : form
+      
+      // Preparar body, incluindo apenas campos que foram preenchidos
+      const body: any = editingId ? { id: editingId } : {}
+      
+      // Sempre incluir campos obrigatórios
+      body.name = form.name
+      body.tipo = form.tipo
+      body.baseUrl = form.baseUrl
+      body.apiKey = form.apiKey
+      body.webhookUrl = form.webhookUrl || null
+      body.sandbox = form.sandbox
+      body.active = form.active
+      
+      // Incluir username e passwordHash se preenchidos (especialmente para Gatebox)
+      if (form.username) body.username = form.username
+      if (form.passwordHash) body.passwordHash = form.passwordHash
       
       // Validações específicas para NXGate
       if (form.tipo === 'nxgate') {
@@ -66,6 +85,25 @@ export default function GatewaysPage() {
         }
         if (!form.apiKey || form.apiKey.length < 10) {
           erro('API Key Inválida', 'A API Key do NXGate é obrigatória e deve ter pelo menos 10 caracteres')
+          setSaving(false)
+          return
+        }
+      }
+      
+      // Validações específicas para Gatebox
+      if (form.tipo === 'gatebox') {
+        if (!form.baseUrl || !form.baseUrl.includes('gatebox.com.br')) {
+          erro('URL Inválida', 'Para Gatebox, a Base URL deve ser https://api.gatebox.com.br')
+          setSaving(false)
+          return
+        }
+        if (!form.username || form.username.length < 5) {
+          erro('Username Inválido', 'O Username do Gatebox é obrigatório')
+          setSaving(false)
+          return
+        }
+        if (!form.passwordHash || form.passwordHash.length < 3) {
+          erro('Password Inválido', 'A Password do Gatebox é obrigatória')
           setSaving(false)
           return
         }
@@ -103,6 +141,8 @@ export default function GatewaysPage() {
       tipo: gw.tipo || 'receba',
       baseUrl: gw.baseUrl,
       apiKey: gw.apiKey,
+      username: gw.username || '',
+      passwordHash: gw.passwordHash || '',
       webhookUrl: gw.webhookUrl || '',
       sandbox: gw.sandbox,
       active: gw.active,
@@ -145,15 +185,23 @@ export default function GatewaysPage() {
   // Atualizar campos quando tipo mudar
   useEffect(() => {
     if (form.tipo === 'nxgate') {
-      if (!form.baseUrl || form.baseUrl === 'https://sandbox.receba.online') {
+      if (!form.baseUrl || form.baseUrl === 'https://sandbox.receba.online' || form.baseUrl === 'https://api.gatebox.com.br') {
         setForm(prev => ({ ...prev, baseUrl: 'https://nxgate.com.br' }))
       }
       if (!form.webhookUrl && typeof window !== 'undefined') {
         const webhookUrl = `${window.location.origin}/api/webhooks/nxgate`
         setForm(prev => ({ ...prev, webhookUrl }))
       }
+    } else if (form.tipo === 'gatebox') {
+      if (!form.baseUrl || form.baseUrl === 'https://nxgate.com.br' || form.baseUrl === 'https://sandbox.receba.online') {
+        setForm(prev => ({ ...prev, baseUrl: 'https://api.gatebox.com.br' }))
+      }
+      if (!form.webhookUrl && typeof window !== 'undefined') {
+        const webhookUrl = `${window.location.origin}/api/webhooks/gatebox`
+        setForm(prev => ({ ...prev, webhookUrl }))
+      }
     } else if (form.tipo === 'receba') {
-      if (!form.baseUrl || form.baseUrl === 'https://nxgate.com.br') {
+      if (!form.baseUrl || form.baseUrl === 'https://nxgate.com.br' || form.baseUrl === 'https://api.gatebox.com.br') {
         setForm(prev => ({ ...prev, baseUrl: 'https://sandbox.receba.online' }))
       }
     }
@@ -189,6 +237,34 @@ export default function GatewaysPage() {
         </div>
       )}
 
+      {/* Informações sobre Gatebox */}
+      {form.tipo === 'gatebox' && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-green-900 mb-3">📋 Informações sobre Gatebox</h3>
+          <div className="space-y-2 text-sm text-green-800">
+            <p><strong>Base URL:</strong> https://api.gatebox.com.br</p>
+            <p><strong>Username:</strong> Seu username de autenticação fornecido pelo Gatebox</p>
+            <p><strong>Password:</strong> Sua senha de autenticação fornecida pelo Gatebox</p>
+            <p><strong>Webhook URL:</strong> URL onde você receberá notificações de pagamento</p>
+            <div className="mt-4 pt-4 border-t border-green-200">
+              <p className="font-semibold mb-2">Endpoints disponíveis:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li><strong>Depósito PIX:</strong> POST /api/deposito/pix-gatebox</li>
+                <li><strong>Saque PIX:</strong> POST /api/saque/pix-gatebox</li>
+                <li><strong>Webhook:</strong> POST {form.webhookUrl || '/api/webhooks/gatebox'}</li>
+              </ul>
+            </div>
+            <div className="mt-4 pt-4 border-t border-green-200">
+              <p className="font-semibold mb-2">💡 Credenciais de Teste (Homologação):</p>
+              <ul className="list-disc list-inside space-y-1 font-mono text-xs">
+                <li><strong>Username:</strong> 93892492000158</li>
+                <li><strong>Password:</strong> @Homolog1</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="bg-white rounded-xl shadow p-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
           {editingId ? 'Editar Gateway' : 'Novo Gateway'}
@@ -214,6 +290,7 @@ export default function GatewaysPage() {
             >
               <option value="receba">Receba Online</option>
               <option value="nxgate">NXGate</option>
+              <option value="gatebox">Gatebox</option>
             </select>
             <p className="text-xs text-gray-500">Selecione o gateway de pagamento que deseja configurar</p>
           </div>
@@ -224,10 +301,13 @@ export default function GatewaysPage() {
               value={form.baseUrl}
               onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder={form.tipo === 'nxgate' ? 'https://nxgate.com.br' : 'https://sandbox.receba.online'}
+              placeholder={form.tipo === 'nxgate' ? 'https://nxgate.com.br' : form.tipo === 'gatebox' ? 'https://api.gatebox.com.br' : 'https://sandbox.receba.online'}
             />
             {form.tipo === 'nxgate' && (
               <p className="text-xs text-gray-500">URL base da API do NXGate</p>
+            )}
+            {form.tipo === 'gatebox' && (
+              <p className="text-xs text-gray-500">URL base da API do Gatebox</p>
             )}
           </div>
           <div className="flex flex-col gap-2">
@@ -238,30 +318,70 @@ export default function GatewaysPage() {
               value={form.webhookUrl || ''}
               onChange={(e) => setForm({ ...form, webhookUrl: e.target.value })}
               className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none"
-              placeholder={form.tipo === 'nxgate' ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/nxgate` : 'https://seudominio.com/api/webhooks'}
+              placeholder={form.tipo === 'nxgate' ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/nxgate` : form.tipo === 'gatebox' ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/gatebox` : 'https://seudominio.com/api/webhooks'}
             />
             {form.tipo === 'nxgate' && (
               <p className="text-xs text-gray-500">
                 URL onde você receberá notificações de pagamento. Deve responder com HTTP 200 e JSON: {"{"}"status": "received"{"}"}
               </p>
             )}
-          </div>
-          <div className="flex flex-col gap-2 md:col-span-2">
-            <label className="text-sm font-semibold text-gray-700">API Key (Chave Secreta)</label>
-            <input
-              required
-              type="password"
-              value={form.apiKey}
-              onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-              className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none font-mono text-sm"
-              placeholder={form.tipo === 'nxgate' ? 'd6fd1a0ed8daf4b33754d9f7d494d697' : 'API Key do gateway'}
-            />
-            {form.tipo === 'nxgate' && (
+            {form.tipo === 'gatebox' && (
               <p className="text-xs text-gray-500">
-                Sua chave secreta (api_key) fornecida pelo NXGate. Esta chave é usada para autenticar todas as requisições.
+                URL onde você receberá notificações de pagamento do Gatebox
               </p>
             )}
           </div>
+          {form.tipo !== 'gatebox' && (
+            <div className="flex flex-col gap-2 md:col-span-2">
+              <label className="text-sm font-semibold text-gray-700">API Key (Chave Secreta)</label>
+              <input
+                required={form.tipo !== 'gatebox'}
+                type="password"
+                value={form.apiKey}
+                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none font-mono text-sm"
+                placeholder={form.tipo === 'nxgate' ? 'd6fd1a0ed8daf4b33754d9f7d494d697' : 'API Key do gateway'}
+              />
+              {form.tipo === 'nxgate' && (
+                <p className="text-xs text-gray-500">
+                  Sua chave secreta (api_key) fornecida pelo NXGate. Esta chave é usada para autenticar todas as requisições.
+                </p>
+              )}
+            </div>
+          )}
+          
+          {form.tipo === 'gatebox' && (
+            <>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-gray-700">Username <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  type="text"
+                  value={form.username || ''}
+                  onChange={(e) => setForm({ ...form, username: e.target.value })}
+                  className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none font-mono text-sm"
+                  placeholder="93892492000158"
+                />
+                <p className="text-xs text-gray-500">
+                  Username de autenticação fornecido pelo Gatebox
+                </p>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-semibold text-gray-700">Password <span className="text-red-500">*</span></label>
+                <input
+                  required
+                  type="password"
+                  value={form.passwordHash || ''}
+                  onChange={(e) => setForm({ ...form, passwordHash: e.target.value })}
+                  className="rounded-lg border border-gray-300 px-3 py-2 focus:border-blue focus:outline-none font-mono text-sm"
+                  placeholder="@Homolog1"
+                />
+                <p className="text-xs text-gray-500">
+                  Senha de autenticação fornecida pelo Gatebox
+                </p>
+              </div>
+            </>
+          )}
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
               <input
@@ -336,9 +456,11 @@ export default function GatewaysPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{gw.name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      gw.tipo === 'nxgate' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                      gw.tipo === 'nxgate' ? 'bg-purple-100 text-purple-800' : 
+                      gw.tipo === 'gatebox' ? 'bg-green-100 text-green-800' : 
+                      'bg-blue-100 text-blue-800'
                     }`}>
-                      {gw.tipo === 'nxgate' ? 'Nxgate' : 'Receba'}
+                      {gw.tipo === 'nxgate' ? 'Nxgate' : gw.tipo === 'gatebox' ? 'Gatebox' : 'Receba'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{gw.baseUrl}</td>

@@ -50,7 +50,9 @@ export interface BetData {
   divisionType: 'all' | 'each'
   useBonus: boolean
   bonusAmount: number
-  location: string | null
+  location: string | null // Mantido para compatibilidade, mas deprecated - usar selectedExtracoes
   instant: boolean
   specialTime: string | null
+  selectedExtracoes?: string[] // IDs das extrações selecionadas (máximo 3)
+  detalhes?: any // Detalhes adicionais da aposta (retorno mínimo/máximo, etc.)
 }

@@ -42,7 +42,9 @@ export default function DepositPixModal({ isOpen, valor, onClose }: DepositPixMo
     setError(null)
 
     try {
-      const res = await fetch('/api/deposito/pix', {
+      // Usar endpoint genérico que escolhe automaticamente o gateway ativo
+      // Prioridade: Gatebox > NXGate
+      const res = await fetch('/api/deposito/pix-auto', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -55,8 +57,22 @@ export default function DepositPixModal({ isOpen, valor, onClose }: DepositPixMo
         throw new Error(data.error || 'Erro ao gerar QR code')
       }
 
-      setQrCodeText(data.qrCodeText)
-      setQrCodeImage(data.qrCode) // Imagem base64
+      // Garantir que temos o código PIX (pode vir em diferentes campos)
+      const pixCode = data.qrCodeText || data.qrCode || data.paymentCode || ''
+      setQrCodeText(pixCode)
+      
+      // Processar imagem base64 (pode vir em diferentes campos)
+      let imageData = data.qrCode || data.qrCodeImage || data.paymentCodeBase64 || null
+      if (imageData) {
+        // Se não tiver prefixo data URI, adicionar
+        if (!imageData.startsWith('data:')) {
+          imageData = `data:image/png;base64,${imageData}`
+        }
+        setQrCodeImage(imageData)
+      } else {
+        setQrCodeImage(null)
+      }
+      
       if (data.expiresAt) {
         setExpiresAt(new Date(data.expiresAt))
       }
@@ -165,13 +181,26 @@ export default function DepositPixModal({ isOpen, valor, onClose }: DepositPixMo
             </div>
 
             {/* QR Code */}
-            <div className="flex justify-center rounded-lg border-2 border-gray-200 bg-white p-4">
-              {qrCodeImage ? (
-                // Usar imagem base64 se disponível
-                <img src={qrCodeImage} alt="QR Code PIX" className="w-64 h-64" />
+            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-gray-200 bg-white p-4">
+              {qrCodeText ? (
+                // Sempre gerar QR code a partir do texto (mais confiável)
+                <div className="flex items-center justify-center">
+                  <QRCodeSVG 
+                    value={qrCodeText} 
+                    size={256} 
+                    level="M"
+                    includeMargin={true}
+                    bgColor="#FFFFFF"
+                    fgColor="#000000"
+                  />
+                </div>
               ) : (
-                // Gerar QR code a partir do texto se não houver imagem
-                qrCodeText && <QRCodeSVG value={qrCodeText} size={256} level="M" />
+                <div className="flex h-64 w-64 items-center justify-center text-gray-400">
+                  <p>QR Code não disponível</p>
+                </div>
+              )}
+              {!qrCodeText && (
+                <p className="mt-2 text-sm text-gray-500">Aguardando código PIX...</p>
               )}
             </div>
 

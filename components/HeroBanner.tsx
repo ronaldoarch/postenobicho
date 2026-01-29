@@ -138,28 +138,51 @@ export default function HeroBanner() {
                                   transform: 'translateZ(50px)',
                                 }}
                                 onError={(e) => {
-                                  // Se a imagem falhar ao carregar, esconde e mostra o emoji
+                                  // Se a imagem falhar ao carregar, esconde e mostra fallback com logo ou emoji
                                   e.currentTarget.style.display = 'none';
-                                  const fallback = document.createElement('span');
-                                  fallback.className = 'text-8xl lg:text-[12rem] xl:text-[14rem] 2xl:text-[16rem]';
-                                  fallback.style.cssText = 'margin-bottom: -80px; position: relative; z-index: 30; filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)); transform: perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px);';
-                                  fallback.textContent = '🦁';
-                                  e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
+                                  if (configuracoes.logoSite) {
+                                    const fallbackImg = document.createElement('img');
+                                    fallbackImg.src = configuracoes.logoSite;
+                                    fallbackImg.alt = configuracoes.nomePlataforma;
+                                    fallbackImg.className = 'h-40 w-auto lg:h-72 xl:h-80 2xl:h-96';
+                                    fallbackImg.style.cssText = 'margin-bottom: -80px; position: relative; z-index: 30; filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)); transform: perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px);';
+                                    e.currentTarget.parentNode?.insertBefore(fallbackImg, e.currentTarget);
+                                  } else {
+                                    const fallback = document.createElement('span');
+                                    fallback.className = 'text-8xl lg:text-[12rem] xl:text-[14rem] 2xl:text-[16rem]';
+                                    fallback.style.cssText = 'margin-bottom: -80px; position: relative; z-index: 30; filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)); transform: perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px);';
+                                    fallback.textContent = '🦁';
+                                    e.currentTarget.parentNode?.insertBefore(fallback, e.currentTarget);
+                                  }
                                 }}
                               />
                             </div>
                           ) : (
-                            <span 
-                              className="text-8xl lg:text-[12rem] xl:text-[14rem] 2xl:text-[16rem] relative z-30 block"
-                              style={{ 
-                                marginBottom: '-80px',
-                                filter: 'drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))',
-                                transform: 'perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px)',
-                                transformStyle: 'preserve-3d',
-                              }}
-                            >
-                              🦁
-                            </span>
+                            configuracoes.logoSite ? (
+                              <img
+                                src={configuracoes.logoSite}
+                                alt={configuracoes.nomePlataforma}
+                                className="relative z-30 block h-32 w-auto lg:h-48 xl:h-56 2xl:h-64"
+                                style={{ 
+                                  marginBottom: '-80px',
+                                  filter: 'drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))',
+                                  transform: 'perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px)',
+                                  transformStyle: 'preserve-3d',
+                                }}
+                              />
+                            ) : (
+                              <span 
+                                className="text-8xl lg:text-[12rem] xl:text-[14rem] 2xl:text-[16rem] relative z-30 block"
+                                style={{ 
+                                  marginBottom: '-80px',
+                                  filter: 'drop-shadow(0 30px 60px rgba(0, 0, 0, 0.5)) drop-shadow(0 15px 30px rgba(0, 0, 0, 0.4)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.3))',
+                                  transform: 'perspective(1200px) rotateY(-12deg) rotateX(12deg) translateZ(50px)',
+                                  transformStyle: 'preserve-3d',
+                                }}
+                              >
+                                🦁
+                              </span>
+                            )
                           )}
                           <span className="text-3xl font-bold text-blue lg:text-4xl relative z-30 mb-4">{configuracoes.nomePlataforma}</span>
                         </div>
@@ -191,11 +214,21 @@ export default function HeroBanner() {
                   {/* Lado Direito - Mascote e Celular */}
                   <div className="relative lg:w-1/2 flex justify-center items-center mt-8 lg:mt-0">
                       <div className="relative">
-                        {/* Mascote Leão - Placeholder */}
+                        {/* Mascote Logo */}
                         <div className="relative z-10">
-                          <div className="h-64 lg:h-96 w-64 lg:w-96 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-6xl shadow-2xl">
-                            🦁
-                          </div>
+                          {configuracoes.logoSite ? (
+                            <div className="h-64 lg:h-96 w-64 lg:w-96 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-2xl p-8">
+                              <img
+                                src={configuracoes.logoSite}
+                                alt={configuracoes.nomePlataforma}
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+                          ) : (
+                            <div className="h-64 lg:h-96 w-64 lg:w-96 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center text-white font-bold text-6xl shadow-2xl">
+                              🦁
+                            </div>
+                          )}
                         </div>
 
                         {/* Celular com App */}

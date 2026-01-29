@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { BetData } from '@/types/bet'
 import { ANIMALS } from '@/data/animals'
 import { MODALITIES } from '@/data/modalities'
 import ProgressIndicator from './ProgressIndicator'
-import SpecialQuotationsModal from './SpecialQuotationsModal'
 import ModalitySelection from './ModalitySelection'
 import AnimalSelection from './AnimalSelection'
 import NumberCalculator from './NumberCalculator'
@@ -15,6 +15,7 @@ import BetConfirmation from './BetConfirmation'
 import InstantResultModal from './InstantResultModal'
 import CotacaoAlertaModal from './CotacaoAlertaModal'
 import AlertaBonito from './AlertaBonito'
+import { useMetaTracking } from '@/hooks/useMetaTracking'
 
 const INITIAL_BET_DATA: BetData = {
   modality: null,
@@ -30,14 +31,28 @@ const INITIAL_BET_DATA: BetData = {
   location: null,
   instant: false,
   specialTime: null,
+  selectedExtracoes: [],
 }
 
-export default function BetFlow() {
+// Componente interno que usa useSearchParams
+function BetFlowContent() {
+  const { trackBet } = useMetaTracking()
+  const searchParams = useSearchParams()
   const [currentStep, setCurrentStep] = useState(1)
   const [betData, setBetData] = useState<BetData>(INITIAL_BET_DATA)
-  const [showSpecialModal, setShowSpecialModal] = useState(false)
-  const [activeTab, setActiveTab] = useState<'bicho' | 'loteria'>('bicho')
+  
+  // Verificar se há parâmetro 'tab' na URL para definir tab inicial
+  const tabFromUrl = searchParams?.get('tab') === 'loteria' ? 'loteria' : 'bicho'
+  const [activeTab, setActiveTab] = useState<'bicho' | 'loteria'>(tabFromUrl)
+  
+  // Atualizar tab se URL mudar
+  useEffect(() => {
+    const tab = searchParams?.get('tab') === 'loteria' ? 'loteria' : 'bicho'
+    setActiveTab(tab)
+  }, [searchParams])
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
+  const [userSaldo, setUserSaldo] = useState<number>(0)
+  const [userBonus, setUserBonus] = useState<number>(0)
   const [showInstantResult, setShowInstantResult] = useState(false)
   const [instantResult, setInstantResult] = useState<{ prizes: number[]; groups: number[]; premioTotal: number } | null>(null)
   const [showCotacaoAlerta, setShowCotacaoAlerta] = useState(false)
@@ -110,23 +125,40 @@ export default function BetFlow() {
     }
   }, [])
 
-  useEffect(() => {
-    const loadMe = async () => {
-      try {
-        const res = await fetch('/api/auth/me')
-        const data = await res.json()
-        setIsAuthenticated(Boolean(data?.user))
-        if (data?.user) {
-          setBetData((prev) => ({ ...prev, bonusAmount: data.user.bonus ?? 0 }))
-        } else {
-          setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
-        }
-      } catch (error) {
-        setIsAuthenticated(false)
+  // Função para carregar dados do usuário
+  const loadUserData = async () => {
+    try {
+      const res = await fetch('/api/auth/me', {
+        cache: 'no-store', // Evitar cache
+        credentials: 'include',
+      })
+      const data = await res.json()
+      console.log('📊 Dados do usuário carregados:', data) // Debug
+      setIsAuthenticated(Boolean(data?.user))
+      if (data?.user) {
+        const saldo = Number(data.user.saldo) || 0
+        const bonus = Number(data.user.bonus) || 0
+        console.log(`💰 Saldo: R$ ${saldo.toFixed(2)}, Bônus: R$ ${bonus.toFixed(2)}`) // Debug
+        setUserSaldo(saldo)
+        setUserBonus(bonus)
+        setBetData((prev) => ({ ...prev, bonusAmount: bonus }))
+      } else {
+        console.log('⚠️ Usuário não autenticado') // Debug
+        setUserSaldo(0)
+        setUserBonus(0)
         setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
       }
+    } catch (error) {
+      console.error('❌ Erro ao carregar dados do usuário:', error)
+      setIsAuthenticated(false)
+      setUserSaldo(0)
+      setUserBonus(0)
+      setBetData((prev) => ({ ...prev, bonusAmount: 0 }))
     }
-    loadMe()
+  }
+
+  useEffect(() => {
+    loadUserData()
   }, [])
 
   const handleNext = () => {
@@ -180,6 +212,67 @@ export default function BetFlow() {
           return
         }
       }
+      
+      // Validar saldo antes de avançar para etapa 4
+      if (isAuthenticated) {
+        const qtdPalpites = isNumberModality ? betData.numberBets.length : betData.animalBets.length
+        
+        // Calcular quantidade de posições selecionadas
+        let qtdPosicoes = 1
+        if (betData.customPosition && betData.customPositionValue) {
+          const cleanedPos = betData.customPositionValue.replace(/º/g, '').replace(/\s/g, '')
+          if (cleanedPos.includes('-')) {
+            const [from, to] = cleanedPos.split('-').map(Number)
+            qtdPosicoes = (to || from || 1) - (from || 1) + 1
+          }
+        } else if (betData.position && betData.position.includes('-')) {
+          const [from, to] = betData.position.split('-').map(p => parseInt(p.trim()))
+          qtdPosicoes = (to || from || 1) - (from || 1) + 1
+        }
+
+        // Calcular quantidade de extrações
+        const qtdExtracoes = betData.selectedExtracoes?.length || (betData.location ? 1 : 0) || 1
+
+        // CÁLCULO CORRETO: O valor digitado é POR EXTRAÇÃO
+        // Exemplo: R$ 2,00 por extração, 3 extrações = R$ 6,00 total debitado
+        // Se "para cada palpite" (each): multiplicar pelo número de palpites também
+        let valorTotal = betData.amount * qtdExtracoes
+        
+        if (betData.divisionType === 'each') {
+          valorTotal = valorTotal * qtdPalpites
+        }
+        
+        // Descontar bônus se estiver usando
+        const valorComBonus = betData.useBonus && betData.bonusAmount > 0
+          ? Math.max(0, valorTotal - betData.bonusAmount)
+          : valorTotal
+        
+        const saldoDisponivel = userSaldo + (betData.useBonus ? userBonus : 0)
+        
+        // Debug: log dos valores para diagnóstico
+        console.log('🔍 Validação de saldo:', {
+          valorTotal,
+          valorComBonus,
+          userSaldo,
+          userBonus,
+          saldoDisponivel,
+          qtdPalpites,
+          divisionType: betData.divisionType,
+        })
+        
+        if (saldoDisponivel < valorComBonus) {
+          const tipoDivisao = betData.divisionType === 'each' 
+            ? ` (R$ ${betData.amount.toFixed(2)} × ${qtdPalpites} palpites)`
+            : ''
+          
+          setAlertaBonito({
+            tipo: 'erro',
+            titulo: 'Saldo Insuficiente',
+            mensagem: `Você precisa de R$ ${valorComBonus.toFixed(2)}${tipoDivisao} mas tem apenas R$ ${saldoDisponivel.toFixed(2)} disponível. Faça um depósito para continuar.`,
+          })
+          return
+        }
+      }
     }
     
     const nextStep = currentStep + 1
@@ -208,6 +301,15 @@ export default function BetFlow() {
   const handleAddAnimalBet = (ids: number[]) => {
     setBetData((prev) => {
       if (prev.animalBets.length >= MAX_PALPITES) return prev
+      
+      // Verificar se já existe um palpite idêntico (evita duplicação)
+      const idsString = JSON.stringify(ids.sort())
+      const alreadyExists = prev.animalBets.some(
+        (bet) => JSON.stringify([...bet].sort()) === idsString
+      )
+      
+      if (alreadyExists) return prev
+      
       return { ...prev, animalBets: [...prev.animalBets, ids] }
     })
   }
@@ -234,6 +336,57 @@ export default function BetFlow() {
   }
 
   const handleConfirm = async () => {
+    // VALIDAÇÃO FINAL DE SALDO
+    // Verificar se o usuário tem saldo suficiente para TODAS as apostas selecionadas
+    if (isAuthenticated) {
+      const qtdPalpites = isNumberModality ? betData.numberBets.length : betData.animalBets.length
+      
+      // Calcular quantidade de extrações
+      // Se location estiver selecionado, conta como 1, mas selectedExtracoes tem prioridade se houver
+      const extracoesParaValidar = betData.selectedExtracoes && betData.selectedExtracoes.length > 0
+        ? betData.selectedExtracoes
+        : betData.location ? [betData.location] : []
+      
+      const qtdExtracoes = extracoesParaValidar.length || 1
+
+      // CÁLCULO TOTAL
+      let valorTotalNecessario = betData.amount * qtdExtracoes
+      
+      if (betData.divisionType === 'each') {
+        valorTotalNecessario = valorTotalNecessario * qtdPalpites
+      }
+      
+      // Descontar bônus se estiver usando
+      const valorComBonus = betData.useBonus && betData.bonusAmount > 0
+        ? Math.max(0, valorTotalNecessario - betData.bonusAmount)
+        : valorTotalNecessario
+      
+      const saldoDisponivel = userSaldo + (betData.useBonus ? userBonus : 0)
+      
+      console.log('🔍 Validação FINAL de saldo:', {
+        valorTotalNecessario,
+        valorComBonus,
+        userSaldo,
+        userBonus,
+        saldoDisponivel,
+        qtdExtracoes,
+        qtdPalpites
+      })
+      
+      if (saldoDisponivel < valorComBonus) {
+        const tipoDivisao = betData.divisionType === 'each' 
+          ? ` (R$ ${betData.amount.toFixed(2)} × ${qtdPalpites} palpites × ${qtdExtracoes} extrações)`
+          : ` (R$ ${betData.amount.toFixed(2)} × ${qtdExtracoes} extrações)`
+        
+        setAlertaBonito({
+          tipo: 'erro',
+          titulo: 'Saldo Insuficiente',
+          mensagem: `O valor total das apostas é R$ ${valorComBonus.toFixed(2)}${tipoDivisao}, mas você tem apenas R$ ${saldoDisponivel.toFixed(2)} disponível.`,
+        })
+        return
+      }
+    }
+
     // Usar modalityName se disponível, senão buscar pelo ID
     // IMPORTANTE: Priorizar sempre modalityName para garantir que a modalidade correta seja salva
     let modalityName = betData.modalityName
@@ -352,18 +505,48 @@ export default function BetFlow() {
         const modalityType = modalityMap[modalityName] || 'GRUPO'
         
         // Usar a mesma lógica de cálculo do sistema de premiação
-        const { buscarOdd, calcularValorPorPalpite, calcularNumero, calcularGrupo } = await import('@/lib/bet-rules-engine')
+        const betRulesEngine = await import('@/lib/bet-rules-engine')
+        const { calcularValorPorPalpite, calcularNumero, calcularGrupo } = betRulesEngine
         const qtdPalpites = isNumberModality ? betData.numberBets.length : betData.animalBets.length
         
-        // Calcular valor por palpite usando a mesma função do sistema
+        // CÁLCULO CORRETO: O valor digitado é POR EXTRAÇÃO
+        // Exemplo: R$ 2,00 por extração, 3 extrações = R$ 6,00 total debitado
+        // Cada aposta salva: R$ 2,00 (valor por extração)
+        // Para prêmio: R$ 2,00 / 3 palpites / 5 posições = valor por palpite por posição
+        const valorPorExtracao = betData.amount // Valor digitado é POR EXTRAÇÃO
+        
+        // Calcular valor por palpite usando o valor por extração
         const valorPorPalpite = calcularValorPorPalpite(
-          betData.amount,
+          valorPorExtracao, // Usar valor por extração (não dividir pelas extrações)
           qtdPalpites,
           betData.divisionType
         )
         
-        // Buscar odd da modalidade
-        let odd = buscarOdd(modalityType as any, pos_from, pos_to)
+        // Buscar odd do banco primeiro (se admin alterou), senão usa hardcoded
+        // Usar API route porque buscarOdd precisa do Prisma (só funciona no servidor)
+        let odd = 18 // Fallback padrão
+        try {
+          const params = new URLSearchParams({
+            modalidade: modalityType as string,
+            pos_from: pos_from.toString(),
+            pos_to: pos_to.toString(),
+          })
+          if (betData.modality) {
+            params.append('modalidadeId', betData.modality)
+          }
+          if (modalityName) {
+            params.append('modalityName', modalityName)
+          }
+          
+          const res = await fetch(`/api/odd/buscar?${params.toString()}`)
+          if (res.ok) {
+            const data = await res.json()
+            odd = data.odd || odd
+          }
+        } catch (error) {
+          console.error('Erro ao buscar odd via API:', error)
+          // Usar fallback se der erro
+        }
         
         // Verificar se milhar ou centena está cotada e ajustar odd
         if (isNumberModality && betData.numberBets.length > 0 && (modalityType === 'MILHAR' || modalityType === 'CENTENA' || modalityType === 'MILHAR_CENTENA')) {
@@ -417,25 +600,72 @@ export default function BetFlow() {
         // Calcular prêmio por unidade (assumindo que ganhou)
         const premioUnidade = odd * calculation.unitValue
         
-        // Retorno previsto = prêmio por unidade * quantidade de unidades que ganhariam * quantidade de palpites
-        // Assumindo que cada palpite ganha 1 vez (hits = 1)
-        const hitsPorPalpite = 1
-        const retornoPorPalpite = hitsPorPalpite * premioUnidade
-        retornoPrevisto = retornoPorPalpite * qtdPalpites
+        // Retorno previsto POR PALPITE (não pelo total de palpites)
+        // Cada palpite pode ganhar em múltiplas posições (1 até qtdPosicoes)
+        // Mínimo: 1 palpite ganha em 1 posição
+        // Máximo: 1 palpite ganha em todas as posições
+        const qtdPosicoes = calculation.positions
+        const retornoMinimoPorPalpite = premioUnidade * 1 // mínimo: 1 posição
+        const retornoMaximoPorPalpite = premioUnidade * qtdPosicoes // máximo: todas posições
+        
+        // Retorno previsto total = mínimo por palpite * quantidade de palpites
+        retornoPrevisto = retornoMinimoPorPalpite * qtdPalpites
+        
+        // Armazenar mínimo e máximo POR PALPITE para exibição
+        if (!betData.detalhes) betData.detalhes = {} as any
+        ;(betData.detalhes as any).retornoMinimo = retornoMinimoPorPalpite
+        ;(betData.detalhes as any).retornoMaximo = retornoMaximoPorPalpite
       } catch (error) {
         console.error('Erro ao calcular retorno previsto:', error)
       }
     }
 
-    const payload = {
-      concurso: betData.location ? `Extração ${betData.location}` : null,
-      loteria: betData.location,
-      estado: estado || null,
-      horario: horario,
+    // Determinar extrações a usar: múltiplas selecionadas OU única (compatibilidade)
+    const extracoesParaApostar = betData.selectedExtracoes && betData.selectedExtracoes.length > 0
+      ? betData.selectedExtracoes
+      : betData.location ? [betData.location] : []
+    
+    // Se não há extrações selecionadas, não pode apostar
+    if (extracoesParaApostar.length === 0) {
+      setAlertaBonito({
+        tipo: 'erro',
+        titulo: 'Extração não selecionada',
+        mensagem: 'Por favor, selecione pelo menos uma extração antes de confirmar a aposta.',
+      })
+      return
+    }
+
+    // Calcular quantidade de posições selecionadas
+    let qtdPosicoes = 1
+    if (betData.customPosition && betData.customPositionValue) {
+      const cleanedPos = betData.customPositionValue.replace(/º/g, '').replace(/\s/g, '')
+      if (cleanedPos.includes('-')) {
+        const [from, to] = cleanedPos.split('-').map(Number)
+        qtdPosicoes = (to || from || 1) - (from || 1) + 1
+      } else {
+        qtdPosicoes = 1
+      }
+    } else if (betData.position) {
+      if (betData.position.includes('-')) {
+        const [from, to] = betData.position.split('-').map(p => parseInt(p.trim()))
+        qtdPosicoes = (to || from || 1) - (from || 1) + 1
+      } else {
+        qtdPosicoes = 1
+      }
+    }
+
+    // CÁLCULO CORRETO: O valor digitado é POR EXTRAÇÃO
+    // Exemplo: R$ 2,00 por extração, 3 extrações = R$ 6,00 total debitado
+    // Cada aposta salva: R$ 2,00 (valor por extração)
+    // Para prêmio: R$ 2,00 / 3 palpites / 5 posições = valor por palpite por posição
+    // Se ganhar: R$ 2,00 × cotação (20 para grupo) = R$ 40,00 por extração ganha
+    const valorPorExtracao = betData.amount // Valor digitado é POR EXTRAÇÃO
+    
+    // Criar payload base (será usado para cada aposta)
+    const basePayload = {
       dataConcurso: new Date().toISOString(),
       modalidade: modalityName,
       aposta: apostaText,
-      valor: betData.amount,
       retornoPrevisto: retornoPrevisto,
       status: 'pendente',
       useBonus: betData.useBonus,
@@ -445,10 +675,49 @@ export default function BetFlow() {
         animalNames: isNumberModality ? undefined : animalNames,
         numberNames: isNumberModality ? numberNames : undefined,
         isNumberModality,
+        retornoMinimo: (betData.detalhes as any)?.retornoMinimo || retornoPrevisto,
+        retornoMaximo: (betData.detalhes as any)?.retornoMaximo || retornoPrevisto,
       },
     }
 
+    // Criar payloads para cada extração (será usado se múltiplas apostas)
+    const payloads = extracoesParaApostar.map(async (extId) => {
+      // Buscar dados da extração
+      let extracaoEstado: string | null = null
+      let extracaoHorario: string | null = betData.specialTime || null
+      
+      try {
+        const res = await fetch('/api/admin/extracoes')
+        const data = await res.json()
+        const extracao = (data?.extracoes || []).find((e: any) => e.id.toString() === extId)
+        if (extracao) {
+          extracaoEstado = extracao.estado || null
+          if (!extracaoHorario && extracao.time) {
+            extracaoHorario = extracao.time
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar extração:', error)
+      }
+
+      return {
+        ...basePayload,
+        concurso: `Extração ${extId}`,
+        loteria: extId,
+        estado: extracaoEstado || estado || null,
+        horario: extracaoHorario || horario,
+        valor: valorPorExtracao, // Valor dividido
+      }
+    })
+
+    // Aguardar todos os payloads serem criados
+    const resolvedPayloads = await Promise.all(payloads)
+    
+    // Se há apenas uma aposta, usar o payload diretamente (compatibilidade)
+    const payload = resolvedPayloads.length === 1 ? resolvedPayloads[0] : resolvedPayloads[0] // Para compatibilidade com código existente
+
     // Verificar se há milhar ou centena cotada antes de finalizar
+    let hasCotacaoEspecial = false
     if (isNumberModality && betData.numberBets.length > 0) {
       for (const numeroApostado of betData.numberBets) {
         const numeroLimpo = numeroApostado.replace(/\D/g, '')
@@ -466,9 +735,10 @@ export default function BetFlow() {
                 numero: milharFormatada,
                 cotacao,
               })
-              setPendingPayload(payload)
+              setPendingPayload(resolvedPayloads.length > 1 ? resolvedPayloads : payload) // Salvar payload(s) para depois
               setShowCotacaoAlerta(true)
-              return // Não finaliza ainda, aguarda confirmação do usuário
+              hasCotacaoEspecial = true
+              break
             }
           } catch (error) {
             console.error('Erro ao verificar milhar cotada:', error)
@@ -488,9 +758,10 @@ export default function BetFlow() {
                 numero: centenaFormatada,
                 cotacao,
               })
-              setPendingPayload(payload)
+              setPendingPayload(resolvedPayloads.length > 1 ? resolvedPayloads : payload) // Salvar payload(s) para depois
               setShowCotacaoAlerta(true)
-              return // Não finaliza ainda, aguarda confirmação do usuário
+              hasCotacaoEspecial = true
+              break
             }
           } catch (error) {
             console.error('Erro ao verificar centena cotada:', error)
@@ -499,64 +770,187 @@ export default function BetFlow() {
       }
     }
 
-    // Se não há cotação ou usuário já confirmou, finaliza a aposta
-    submitBet(payload)
+    // Se não há cotação especial, finaliza a(s) aposta(s) imediatamente
+    if (!hasCotacaoEspecial) {
+      if (resolvedPayloads.length > 1) {
+        // Múltiplas apostas: criar uma por vez
+        submitMultipleBets(resolvedPayloads)
+      } else {
+        // Uma única aposta (compatibilidade)
+        submitBet(payload)
+      }
+    }
   }
 
-  const submitBet = async (payload: any) => {
-    fetch('/api/apostas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(payload),
-    })
-      .then(async (res) => {
+  const submitMultipleBets = async (payloads: any[]) => {
+    try {
+      // Criar todas as apostas sequencialmente
+      const results = []
+      for (const payload of payloads) {
+        const res = await fetch('/api/apostas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(payload),
+        })
+        
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || 'Erro ao criar aposta')
+          if (data.bloqueado && data.mensagem) {
+            setAlertaBonito({
+              tipo: 'erro',
+              titulo: 'Aposta Bloqueada',
+              mensagem: data.mensagem,
+            })
+            return
+          }
+          throw new Error(data.error || data.mensagem || 'Erro ao criar aposta')
         }
+        
         const data = await res.json()
-        if (betData.instant && data.aposta?.detalhes?.resultadoInstantaneo) {
-          setInstantResult({
-            prizes: data.aposta.detalhes.resultadoInstantaneo.prizes,
-            groups: data.aposta.detalhes.resultadoInstantaneo.groups,
-            premioTotal: data.aposta.detalhes.premioTotal || 0,
-          })
+        results.push(data)
+      }
+
+      // Se todas as apostas foram criadas com sucesso
+      if (results.length === payloads.length) {
+        // Tracking Meta Pixel
+        trackBet(betData.amount)
+        
+        // Disparar evento para atualizar saldo automaticamente no Header
+        window.dispatchEvent(new Event('saldo-updated'))
+        
+        // Mostrar resultado instantâneo se aplicável
+        if (betData.instant && results[0]?.resultadoInstantaneo) {
+          setInstantResult(results[0].resultadoInstantaneo)
           setShowInstantResult(true)
         } else {
           setAlertaBonito({
             tipo: 'sucesso',
-            titulo: 'Aposta Registrada!',
-            mensagem: 'Sua aposta foi registrada com sucesso. Boa sorte!',
+            titulo: 'Apostas Registradas!',
+            mensagem: `${results.length} aposta(s) registrada(s) com sucesso. Boa sorte!`,
           })
         }
-        // Resetar dados após sucesso
+        
+        // Recarregar dados do usuário
+        const userRes = await fetch('/api/auth/me', { credentials: 'include' })
+        if (userRes.ok) {
+          const userData = await userRes.json()
+          setUserSaldo(userData.saldo || 0)
+          setUserBonus(userData.bonus || 0)
+        }
+        
+        // Resetar dados da aposta
         setBetData(INITIAL_BET_DATA)
         setCurrentStep(1)
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar múltiplas apostas:', error)
+      setAlertaBonito({
+        tipo: 'erro',
+        titulo: 'Erro ao Registrar Apostas',
+        mensagem: error.message || 'Ocorreu um erro ao registrar as apostas. Tente novamente.',
       })
-      .catch((err) => {
-        const msg = err.message || 'Erro ao registrar aposta'
-        if (msg.toLowerCase().includes('saldo insuficiente')) {
-          setAlertaBonito({
-            tipo: 'erro',
-            titulo: 'Saldo Insuficiente',
-            mensagem: 'Verifique seu saldo e bônus disponíveis antes de apostar.',
-          })
-        } else {
-          setAlertaBonito({
-            tipo: 'erro',
-            titulo: 'Erro ao Registrar Aposta',
-            mensagem: msg,
-          })
-        }
-      })
+    }
   }
 
-  const handleConfirmCotacao = () => {
-    setShowCotacaoAlerta(false)
-    if (pendingPayload) {
-      submitBet(pendingPayload)
-      setPendingPayload(null)
+  const submitBet = async (payload: any) => {
+    try {
+      const res = await fetch('/api/apostas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        // Se for erro de bloqueio, usar mensagem específica
+        if (data.bloqueado && data.mensagem) {
+          setAlertaBonito({
+            tipo: 'erro',
+            titulo: 'Aposta Bloqueada',
+            mensagem: data.mensagem,
+          })
+          return
+        }
+        throw new Error(data.error || data.mensagem || 'Erro ao criar aposta')
+      }
+
+      const data = await res.json()
+      
+      // Disparar evento para atualizar saldo automaticamente no Header
+      window.dispatchEvent(new Event('saldo-updated'))
+      
+      // Rastrear aposta no Meta Pixel
+      const modalityName = MODALITIES.find(m => m.id.toString() === betData.modality)?.name || 'Jogo do Bicho'
+      // Calcular quantidade de posições e extrações para o cálculo correto
+      let qtdPosicoesTrack = 1
+      if (betData.customPosition && betData.customPositionValue) {
+        const cleanedPos = betData.customPositionValue.replace(/º/g, '').replace(/\s/g, '')
+        if (cleanedPos.includes('-')) {
+          const [from, to] = cleanedPos.split('-').map(Number)
+          qtdPosicoesTrack = (to || from || 1) - (from || 1) + 1
+        }
+      } else if (betData.position && betData.position.includes('-')) {
+        const [from, to] = betData.position.split('-').map(p => parseInt(p.trim()))
+        qtdPosicoesTrack = (to || from || 1) - (from || 1) + 1
+      }
+      
+      const qtdExtracoesTrack = betData.selectedExtracoes?.length || (betData.location ? 1 : 0) || 1
+      const qtdPalpitesTrack = betData.animalBets.length + betData.numberBets.length
+      const valorPorApostaTrack = betData.amount / qtdPosicoesTrack
+      const totalValue = betData.divisionType === 'each' 
+        ? valorPorApostaTrack * qtdExtracoesTrack * qtdPalpitesTrack
+        : valorPorApostaTrack * qtdExtracoesTrack
+      trackBet(totalValue, modalityName)
+      
+      if (betData.instant && data.aposta?.detalhes?.resultadoInstantaneo) {
+        setInstantResult({
+          prizes: data.aposta.detalhes.resultadoInstantaneo.prizes,
+          groups: data.aposta.detalhes.resultadoInstantaneo.groups,
+          premioTotal: data.aposta.detalhes.premioTotal || 0,
+        })
+        setShowInstantResult(true)
+        // Se ganhou prêmio, atualizar saldo novamente após mostrar resultado
+        if (data.aposta.detalhes.premioTotal > 0) {
+          setTimeout(() => {
+            window.dispatchEvent(new Event('saldo-updated'))
+          }, 1000)
+        }
+      } else {
+        setAlertaBonito({
+          tipo: 'sucesso',
+          titulo: 'Aposta Registrada!',
+          mensagem: 'Sua aposta foi registrada com sucesso. Boa sorte!',
+        })
+      }
+      // Recarregar saldo após aposta
+      await loadUserData()
+      // Resetar dados após sucesso
+      setBetData(INITIAL_BET_DATA)
+      setCurrentStep(1)
+    } catch (err: any) {
+      const msg = err.message || 'Erro ao registrar aposta'
+      
+      if (msg.toLowerCase().includes('saldo insuficiente')) {
+        setAlertaBonito({
+          tipo: 'erro',
+          titulo: 'Saldo Insuficiente',
+          mensagem: 'Verifique seu saldo e bônus disponíveis antes de apostar.',
+        })
+      } else if (msg.toLowerCase().includes('bloqueado') || msg.toLowerCase().includes('limite')) {
+        setAlertaBonito({
+          tipo: 'erro',
+          titulo: 'Aposta Bloqueada',
+          mensagem: msg,
+        })
+      } else {
+        setAlertaBonito({
+          tipo: 'erro',
+          titulo: 'Erro ao Registrar Aposta',
+          mensagem: msg,
+        })
+      }
     }
   }
 
@@ -564,6 +958,23 @@ export default function BetFlow() {
     setShowCotacaoAlerta(false)
     setCotacaoAlerta(null)
     setPendingPayload(null)
+  }
+
+  const handleConfirmCotacao = () => {
+    setShowCotacaoAlerta(false)
+    setCotacaoAlerta(null)
+    
+    // Se há payload pendente, finalizar a(s) aposta(s)
+    if (pendingPayload) {
+      if (Array.isArray(pendingPayload)) {
+        // Múltiplas apostas
+        submitMultipleBets(pendingPayload)
+      } else {
+        // Uma única aposta
+        submitBet(pendingPayload)
+      }
+      setPendingPayload(null)
+    }
   }
 
   const renderStep = () => {
@@ -609,7 +1020,6 @@ export default function BetFlow() {
                     numberBets: [], // limpa palpites numéricos ao trocar modalidade
                   }))
                 }
-                onSpecialQuotationsClick={() => setShowSpecialModal(true)}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -668,9 +1078,11 @@ export default function BetFlow() {
             instant={betData.instant}
             location={betData.location}
             specialTime={betData.specialTime}
+            selectedExtracoes={betData.selectedExtracoes || []}
             onInstantChange={(checked) => setBetData((prev) => ({ ...prev, instant: checked }))}
             onLocationChange={(loc) => setBetData((prev) => ({ ...prev, location: loc }))}
             onSpecialTimeChange={(time) => setBetData((prev) => ({ ...prev, specialTime: time }))}
+            onSelectedExtracoesChange={(extracoes) => setBetData((prev) => ({ ...prev, selectedExtracoes: extracoes }))}
           />
         )
 
@@ -690,10 +1102,6 @@ export default function BetFlow() {
       <ProgressIndicator currentStep={currentStep} />
 
       {/* Special Quotations Modal */}
-      <SpecialQuotationsModal
-        isOpen={showSpecialModal}
-        onClose={() => setShowSpecialModal(false)}
-      />
 
       {/* Step Content */}
       <div className="mb-6">{renderStep()}</div>
@@ -765,6 +1173,15 @@ export default function BetFlow() {
         />
       )}
     </div>
+  )
+}
+
+// Componente wrapper que envolve BetFlowContent em Suspense
+export default function BetFlow() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-gray-600">Carregando...</div>}>
+      <BetFlowContent />
+    </Suspense>
   )
 }
 

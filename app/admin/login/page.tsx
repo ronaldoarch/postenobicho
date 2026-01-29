@@ -14,13 +14,16 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Verificar se já está logado
+    // Verificar se já está logado e é admin
     const checkAuth = async () => {
       try {
         const res = await fetch('/api/auth/me', { credentials: 'include' })
         const data = await res.json()
-        if (data.user) {
+        if (data.user && data.user.admin) {
           router.push('/admin')
+        } else if (data.user && !data.user.admin) {
+          // Usuário logado mas não é admin
+          setError('Acesso negado. Apenas administradores podem acessar o painel.')
         }
       } catch (error) {
         // Não autenticado, continuar na página de login
@@ -44,8 +47,19 @@ export default function AdminLoginPage() {
       if (!res.ok) {
         throw new Error(data.error || 'Credenciais inválidas')
       }
-      // Redirecionar para o dashboard admin
-      router.push('/admin')
+      
+      // Verificar se o usuário é admin após login
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' })
+      const meData = await meRes.json()
+      
+      if (meData.user && meData.user.admin) {
+        // Redirecionar para o dashboard admin
+        router.push('/admin')
+      } else {
+        setError('Acesso negado. Apenas administradores podem acessar o painel.')
+        // Fazer logout do usuário não-admin
+        await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+      }
     } catch (err: any) {
       setError(err.message || 'Erro ao fazer login')
     } finally {
@@ -82,7 +96,7 @@ export default function AdminLoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="admin@postenobicho.com"
+              placeholder="Digite seu email"
               className="w-full rounded-lg border border-gray-300 px-4 py-3 focus:border-blue focus:outline-none focus:ring-2 focus:ring-blue/20"
             />
           </div>

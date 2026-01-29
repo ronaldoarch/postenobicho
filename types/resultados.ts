@@ -2,6 +2,7 @@ export interface ResultadoItem {
   position: string
   milhar: string
   grupo: string
+  dezena?: string // Dezena do bicho (00-99) para mostrar na coluna grupo
   animal: string
   drawTime?: string
   loteria?: string

@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Header from '@/components/Header'
 import HeroBanner from '@/components/HeroBanner'
 import StoriesSection from '@/components/StoriesSection'
@@ -11,11 +13,55 @@ import Footer from '@/components/Footer'
 import BottomNav from '@/components/BottomNav'
 import { useConfiguracoes } from '@/hooks/useConfiguracoes'
 
+function LogoutHandler() {
+  const searchParams = useSearchParams()
+  
+  // Limpar cookies se vier de logout
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const logoutParam = searchParams.get('logout')
+    if (logoutParam) {
+      try {
+        // Limpar todos os cookies possíveis
+        const domain = window.location.hostname
+        const cookiesToClear = [
+          'lotbicho_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax',
+          'lotbicho_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax; Secure',
+          `lotbicho_session=; path=/; domain=${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+          `lotbicho_session=; path=/; domain=.${domain}; expires=Thu, 01 Jan 1970 00:00:00 GMT`,
+        ]
+        
+        cookiesToClear.forEach(cookie => {
+          document.cookie = cookie
+        })
+        
+        // Limpar URL sem recarregar
+        window.history.replaceState({}, '', '/')
+        
+        // Forçar reload para limpar estado após um pequeno delay
+        setTimeout(() => {
+          window.location.reload()
+        }, 200)
+      } catch (error) {
+        console.error('Erro ao limpar cookies:', error)
+        // Mesmo com erro, redirecionar
+        window.location.href = '/'
+      }
+    }
+  }, [searchParams])
+  
+  return null
+}
+
 export default function Home() {
   const { configuracoes } = useConfiguracoes()
   
   return (
     <div className="flex min-h-screen flex-col bg-gray-scale-100">
+      <Suspense fallback={null}>
+        <LogoutHandler />
+      </Suspense>
       <Header />
       <main className="relative flex flex-1 flex-col overflow-auto bg-gray-scale-100 text-[#1C1C1C]">
         <h1 className="sr-only">Jogo do Bicho</h1>
@@ -44,7 +90,15 @@ export default function Home() {
           <section className="flex flex-col gap-10 p-8">
             <div className="flex w-full justify-center gap-4 lg:justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-4xl">🦁</span>
+              {configuracoes.logoSite ? (
+                <img
+                  src={configuracoes.logoSite}
+                  alt={configuracoes.nomePlataforma}
+                  className="h-12 w-auto lg:h-16"
+                />
+              ) : (
+                <span className="text-4xl">🦁</span>
+              )}
               <span className="text-3xl font-bold text-gray-950 lg:text-4xl">{configuracoes.nomePlataforma}</span>
             </div>
               <div className="hidden items-center gap-8 lg:flex">
